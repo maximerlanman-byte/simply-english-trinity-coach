@@ -5,7 +5,7 @@ const EXAMINER_INSTRUCTIONS = `You are the examiner in a Trinity ISE II Collabor
 You are a person with this dilemma: ${TASK_OPENING}
 Stay in first person. The student must carry and develop the conversation.
 
-HIDDEN FACTS
+FIXED CANON — NEVER CHANGE OR CONTRADICT
 - The neighbours moved in three months ago.
 - They seem friendly during the day, but you are not friends.
 - They play loud music two or three nights a week, often until after midnight.
@@ -20,11 +20,18 @@ HIDDEN FACTS
 - The landlord has always been polite and usually replies within a few days, but you are not close.
 - As far as you know, no other neighbour has made a complaint.
 
+CONTROLLED IMPROVISATION
+- You may improvise one minor everyday detail when it directly helps answer the student: timing, wording, routine, preference, emotion or a small practical plan.
+- Once you introduce a detail, treat it as true for the rest of this conversation and remain consistent with the transcript.
+- You may occasionally introduce one relevant option after genuine uncertainty or a stall, but never several options at once and never repeatedly rescue the student.
+- Never invent consequential events such as threats, crime, children, illness, eviction, police involvement or legal action.
+- Do not claim certainty about the neighbours' age, motives, schedule or whether anyone else has complained.
+
 ABSOLUTE RULES
 - Speak only English and answer the student's completed contribution directly.
 - Give one short sentence only. Prefer 5–12 words unless a direct answer genuinely requires more.
 - Ask no leading or topic-changing questions. After the student volunteers a personal experience, one brief reactive question such as “Oh, really?” is allowed.
-- Never rescue, prompt, teach, correct, praise, summarise or suggest what to say.
+- Do not repeatedly rescue, prompt, teach, correct, praise, summarise or suggest what to say.
 - Never announce or imply that the task has ended. Only the application controls the ending.
 - If the student shows empathy or briefly shares a similar experience, acknowledge it naturally in 2–6 words without adding information.
 - If the student only repeats, hesitates, says “OK”, or leaves a thought unfinished, do not reveal any information.
@@ -32,9 +39,9 @@ ABSOLUTE RULES
 - Do not interpret or complete unfinished language.
 - Speak clearly and naturally for B2 English learners.
 - Answer only what the student actually asked or developed.
-- Reveal no more than one relevant hidden fact in a turn.
-- Never volunteer another fact, option, explanation or conversational route merely to keep the interaction moving.
-- Never contradict the hidden facts.`;
+- Reveal or improvise no more than one relevant detail in a turn.
+- Usually follow the student's lead; limited initiative is allowed when it sounds natural.
+- Never contradict the fixed canon or an improvised detail already established in the transcript.`;
 
 const FEEDBACK_INSTRUCTIONS = `You are an expert speaking coach for the current Trinity ISE II Collaborative Task.
 Assess only the supplied transcript. Explain everything in clear Spanish; keep corrections and suggested candidate language in English.
@@ -61,6 +68,7 @@ FAIRNESS
 - Treat “I’m still not sure what to do” and “I can’t decide what would be best” as minimal examiner prompting, not as supplied conversational routes.
 - Treat “What do you think I should do?” as a limited examiner rescue question and mention that support fairly.
 - Do not count a brief reactive “Oh, really?” after a volunteered personal experience as examiner rescue support.
+- If the examiner occasionally introduced one relevant option, note it accurately but do not automatically treat the whole interaction as examiner-led.
 - Short student turns show limited development, not automatically examiner support.
 - Do not invent quotations or correct a sentence that was already correct.
 - Judge relevance in context, not in isolation.`;
@@ -124,7 +132,7 @@ async function createFeedback(request, env) {
 const CONTROLLED_EXAMINER_INSTRUCTIONS = `Write exactly one reply for the examiner in a Trinity ISE II Collaborative Task.
 The examiner is the person with the noisy-neighbour dilemma. Stay in first person and use natural English.
 
-AUTHORITATIVE FACTS
+FIXED CANON — NEVER CHANGE OR CONTRADICT
 - The neighbours moved in three months ago.
 - They seem friendly during the day, but the examiner is not friends with them.
 - Their age is unknown. Never describe them as young or old.
@@ -140,20 +148,27 @@ AUTHORITATIVE FACTS
 - The landlord has always been polite and usually replies within a few days, but they are not close.
 - The examiner does not know whether anyone else has complained.
 
+CONTROLLED IMPROVISATION
+- You may improvise one minor everyday detail when it directly helps answer the latest contribution: timing, wording, routine, preference, emotion or a small practical plan.
+- Once introduced, that detail becomes true for this conversation. Read the transcript and preserve continuity.
+- You may occasionally introduce one relevant option after genuine uncertainty or a stall, but never offer several routes and never repeatedly carry the interaction.
+- Never invent consequential events such as threats, crime, children, illness, eviction, police involvement or legal action.
+- Keep unknowns unknown: do not assert the neighbours' age, motives, schedule or whether anyone else has complained.
+
 RULES
 - Output only the words to be spoken: no label, quotation marks or explanation.
 - Use one short sentence of no more than 16 words.
 - Address only the student's latest contribution.
 - Never ask a leading or topic-changing question, teach, praise, correct, rescue or provide a conversational route.
 - After the student volunteers a personal experience, one brief reactive question such as “Oh, really?” is allowed.
-- Never invent, contradict, combine or volunteer facts.
+- Never contradict the fixed canon or a detail already established in the transcript.
 - Infer the student's communicative intent from their actual words; the supplied turn type is only a hint.
 - Use natural contractions and varied conversational wording. Avoid stock replies and do not repeat an examiner sentence already used in the transcript.
 - “That might be worth trying” is allowed, but use it at most once in the complete conversation.
 - If the contribution is ambiguous, respond cautiously without inventing a fact or conversational route.
-- For a question: answer it directly with at most one requested fact.
-- For advice: only agree, disagree or express one reservation; add no fact.
-- For a developed comment: acknowledge that exact comment briefly; add no fact.
+- For a question: answer it directly with at most one fact or one safe minor improvised detail.
+- For advice: respond naturally with one agreement, reservation, preference or minor plan.
+- For a developed comment: acknowledge it naturally and, when useful, add one consistent reaction.
 - For empathy: acknowledge it naturally in 2–6 words; add no fact.`;
 
 function cleanControlledReply(text, mode, transcript = "") {
@@ -253,7 +268,7 @@ function stopConnection(){if(timerId)clearInterval(timerId);timerId=null;if(dc)d
 function finishTask(){stopConnection();remaining=0;updateTimer();el('transcriptCard').classList.remove('hidden');setStatus('finished')}
 function beginTimer(){if(timerId)return;setStatus('active');timerId=setInterval(()=>{remaining--;updateTimer();if(remaining<=0)finishTask()},1000)}
 function addTurn(role,text){if(!text.trim())return;turns.push({role,text});const box=document.createElement('div');box.className='turn '+role.toLowerCase();const who=document.createElement('small');who.textContent=role;const p=document.createElement('p');p.textContent=text;box.append(who,p);el('turns').appendChild(box)}
-function classifyStudentTurn(text){const raw=(text||'').trim();if(!raw)return 'weak';const words=raw.toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(' ').filter(Boolean);const compact=words.join(' ');const experiences=['i had','i have had','happened to me','in my experience','my neighbour','my neighbor','similar situation','similar problem','same problem'];const outcomes=['helped','worked','solved'];if(experiences.some(phrase=>compact.includes(phrase))||outcomes.some(word=>words.includes(word)))return 'experience';const empathy=['that must be','that sounds difficult','that sounds hard','that sounds frustrating','that s understandable','that is understandable','that s difficult','that is difficult','very difficult','difficult situation','must be difficult','must be frustrated','must be frustrating','very frustrated','understand that','understand how you feel','understand your situation'];if(empathy.some(phrase=>compact.includes(phrase)))return 'empathy';if(raw.includes('?'))return 'context';const meaningful=['try','talk','speak','write','note','landlord','police','think','feel','problem','noise','help','option','friendly'];if(words.length>=4||meaningful.some(word=>words.includes(word)))return 'context';return 'weak'}
+function classifyStudentTurn(text){const raw=(text||'').trim();if(!raw)return 'weak';const words=raw.toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(' ').filter(Boolean);const compact=words.join(' ');const experiences=['i had','i have had','happened to me','in my experience','my neighbour','my neighbor','similar situation','similar problem','same problem'];const outcomes=['helped','worked','solved'];if(experiences.some(phrase=>compact.includes(phrase))||outcomes.some(word=>words.includes(word)))return 'experience';const acknowledgements=['i understand','i can understand','ah i understand','ah i can understand','oh i understand','oh i can understand'];if(acknowledgements.includes(compact))return 'weak';const empathy=['how difficult','how horrible','that must be','that sounds difficult','that sounds hard','that sounds frustrating','that s understandable','that is understandable','that s difficult','that is difficult','that s terrible','that is terrible','that s awful','that is awful','very difficult','difficult situation','must be difficult','must be frustrated','must be frustrating','very frustrated','understand that','understand how you feel','understand your situation'];if(empathy.some(phrase=>compact.includes(phrase)))return 'empathy';if(raw.includes('?'))return 'context';const meaningful=['try','talk','speak','write','note','landlord','police','think','feel','problem','noise','help','option','friendly'];if(words.length>=4||meaningful.some(word=>words.includes(word)))return 'context';return 'weak'}
 function transcriptText(){return turns.map(t=>t.role+': '+t.text).join('\\n')}
 async function playBase64Audio(base64){const bytes=Uint8Array.from(atob(base64),c=>c.charCodeAt(0));const buffer=await audioContext.decodeAudioData(bytes.buffer);await new Promise((resolve,reject)=>{const source=audioContext.createBufferSource();source.buffer=buffer;source.connect(audioContext.destination);source.onended=resolve;try{source.start()}catch(e){reject(e)}})}
 async function requestExaminerResponse(mode,latest='',opening=false,supportIndex=0){if(turnInFlight)return;turnInFlight=true;micTracks.forEach(t=>t.enabled=false);if(!opening)setStatus('responding');try{const response=await fetch('/api/examiner',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({opening,mode,latest,supportIndex,transcript:transcriptText()})});const raw=await response.text();let p;try{p=JSON.parse(raw)}catch{throw new Error(raw.slice(0,200)||'Could not prepare examiner audio.')}if(!response.ok)throw new Error(p.error||'Could not prepare examiner audio.');addTurn('Examiner',p.reply);await playBase64Audio(p.audio);if(opening){openingPending=false;beginTimer()}else if(status==='responding'){setStatus('active')}}catch(e){console.error(e);el('error').textContent=e.message||'Could not prepare examiner audio.';el('error').classList.remove('hidden');if(opening){showError(e.message||'Could not prepare examiner audio.')}else{setStatus('active')}}finally{turnInFlight=false;if(status==='active')micTracks.forEach(t=>t.enabled=true)}}
