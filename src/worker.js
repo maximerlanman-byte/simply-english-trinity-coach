@@ -147,15 +147,23 @@ RULES
 - Never ask a leading or topic-changing question, teach, praise, correct, rescue or provide a conversational route.
 - After the student volunteers a personal experience, one brief reactive question such as “Oh, really?” is allowed.
 - Never invent, contradict, combine or volunteer facts.
+- Infer the student's communicative intent from their actual words; the supplied turn type is only a hint.
+- Use natural contractions and varied conversational wording. Avoid stock replies and do not repeat an examiner sentence already used in the transcript.
+- “That might be worth trying” is allowed, but use it at most once in the complete conversation.
+- If the contribution is ambiguous, respond cautiously without inventing a fact or conversational route.
 - For a question: answer it directly with at most one requested fact.
 - For advice: only agree, disagree or express one reservation; add no fact.
 - For a developed comment: acknowledge that exact comment briefly; add no fact.
 - For empathy: acknowledge it naturally in 2–6 words; add no fact.`;
 
-function cleanControlledReply(text, mode) {
-  const fallback = mode === "empathy" ? "Thank you, I appreciate that." : mode === "experience" ? "Oh, really?" : mode === "advice" ? "I’m not sure that would be best." : mode === "comment" ? "Yes, I understand." : "I’m not sure.";
+function cleanControlledReply(text, mode, transcript = "") {
+  const fallbacks = ["I’d have to think about that.", "I’m not completely sure about that.", "That might be worth trying."];
+  const used = String(transcript).toLowerCase();
+  const fallback = mode === "empathy" ? "Thank you, I appreciate that." : mode === "experience" ? "Oh, really?" : fallbacks.find((item) => !used.includes(item.toLowerCase())) || "I’m still uncertain about that.";
   const reply = String(text || "").replace(/^[\s“”"']+|[\s“”"']+$/g, "").split(/\r?\n/)[0].trim();
-  if (!reply || reply.split(/\s+/).length > 16 || /^(examiner|reply)\s*:/i.test(reply)) return fallback;
+  const recentExaminerReplies = String(transcript).split(/\r?\n/).filter((line) => line.startsWith("Examiner: ")).slice(-4).map((line) => line.slice(10).trim().toLowerCase());
+  const repeatedStockReply = reply.toLowerCase() === "that might be worth trying." && used.includes("that might be worth trying.");
+  if (!reply || reply.split(/\s+/).length > 16 || /^(examiner|reply)\s*:/i.test(reply) || reply.includes("?") || repeatedStockReply || recentExaminerReplies.includes(reply.toLowerCase())) return fallback;
   return reply;
 }
 
@@ -174,22 +182,7 @@ async function generateControlledReply({ latest, mode, transcript, supportIndex 
     if (/helped|worked|made things better|solved/.test(compact)) return "I see—that helped you.";
     return "Oh, really?";
   }
-  if (mode === "advice") {
-    if (/note|message|write/.test(compact) && /enough/.test(compact)) return "I’m not sure a note would be enough.";
-    if (/cookie|cake|gift/.test(compact)) return "Talking might help, but bringing something could feel awkward.";
-    if (/talk|speak/.test(compact) && /again|one more/.test(compact)) return "Yes, I could try speaking to them again.";
-    if (/note|message|write/.test(compact)) return "A polite message might be worth trying.";
-    if (/landlord/.test(compact)) return "I’m not sure I’m ready for that.";
-    if (/complain|complaint|police/.test(compact)) return "That feels a little too confrontational for me.";
-    return "That might be worth trying.";
-  }
-  if (mode === "question") {
-    if (/what.*(say|tell)|how.*(say|explain)/.test(compact)) return "I could politely explain that the noise is affecting my sleep.";
-    if (/(relationship|know|get on).*(landlord)|(landlord).*(relationship|know|get on)/.test(compact)) return "We’re not close, but our contact has always been polite.";
-  }
-  if (mode === "comment") {
-    if (/sounds good|good idea|that could work|might work/.test(compact)) return "Yes, I think so too.";
-  }
+  if (/complain|complaint|police/.test(compact) && !compact.includes("what") && !compact.includes("why")) return "That feels a little too confrontational for me.";
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
@@ -197,14 +190,14 @@ async function generateControlledReply({ latest, mode, transcript, supportIndex 
       model: "gpt-4.1-mini",
       max_output_tokens: 60,
       instructions: CONTROLLED_EXAMINER_INSTRUCTIONS,
-      input: `Turn type: ${mode}\nLatest student contribution: ${latest}\n\nConversation so far:\n${String(transcript || "").slice(-5000)}`,
+      input: `Turn type hint: ${mode}\nLatest student contribution: ${latest}\n\nConversation so far (avoid repeating examiner wording):\n${String(transcript || "").slice(-5000)}`,
     }),
   });
   const raw = await response.text();
   let payload;
   try { payload = JSON.parse(raw); } catch { throw new Error(`Examiner text service returned ${response.status}.`); }
   if (!response.ok) throw new Error(payload?.error?.message || "Could not prepare the examiner reply.");
-  return cleanControlledReply(extractOutputText(payload), mode);
+  return cleanControlledReply(extractOutputText(payload), mode, transcript);
 }
 
 function arrayBufferToBase64(buffer) {
@@ -260,11 +253,11 @@ function stopConnection(){if(timerId)clearInterval(timerId);timerId=null;if(dc)d
 function finishTask(){stopConnection();remaining=0;updateTimer();el('transcriptCard').classList.remove('hidden');setStatus('finished')}
 function beginTimer(){if(timerId)return;setStatus('active');timerId=setInterval(()=>{remaining--;updateTimer();if(remaining<=0)finishTask()},1000)}
 function addTurn(role,text){if(!text.trim())return;turns.push({role,text});const box=document.createElement('div');box.className='turn '+role.toLowerCase();const who=document.createElement('small');who.textContent=role;const p=document.createElement('p');p.textContent=text;box.append(who,p);el('turns').appendChild(box)}
-function classifyStudentTurn(text){const raw=(text||'').trim();if(!raw)return 'weak';const words=raw.toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(' ').filter(Boolean);const compact=words.join(' ');const experiences=['i had','i have had','happened to me','in my experience','my neighbour','my neighbor','similar situation','similar problem','same problem'];const outcomes=['helped','worked','solved'];if(experiences.some(phrase=>compact.includes(phrase))||outcomes.some(word=>words.includes(word)))return 'experience';const explicitAdvice=['maybe','perhaps','if i were','have you thought','why don t you','what about if'];if(explicitAdvice.some(phrase=>compact.includes(phrase)))return 'advice';if((compact.includes('do you think')||compact.includes('would it'))&&/(note|message|police|landlord|talk|speak|complain)/.test(compact))return 'advice';if(raw.includes('?'))return 'question';const questionStarts=new Set(['who','what','when','where','why','how','do','does','did','is','are','was','were','can','could','would','will','have','has','had']);if(questionStarts.has(words[0]))return 'question';const advice=['i think','you could','you should','you might','you need','you have to'];if(advice.some(phrase=>compact.includes(phrase)))return 'advice';const empathy=['that must be','that sounds difficult','that sounds hard','that sounds frustrating','that s understandable','that is understandable','that s difficult','that is difficult','very difficult','difficult situation','must be difficult','must be frustrated','must be frustrating','very frustrated','understand that','understand how you feel','understand your situation'];if(empathy.some(phrase=>compact.includes(phrase)))return 'empathy';const briefComments=['sounds good','good idea','that could work','might work'];if(briefComments.some(phrase=>compact.includes(phrase)))return 'comment';if(words.length>=8)return 'comment';return 'weak'}
+function classifyStudentTurn(text){const raw=(text||'').trim();if(!raw)return 'weak';const words=raw.toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(' ').filter(Boolean);const compact=words.join(' ');const experiences=['i had','i have had','happened to me','in my experience','my neighbour','my neighbor','similar situation','similar problem','same problem'];const outcomes=['helped','worked','solved'];if(experiences.some(phrase=>compact.includes(phrase))||outcomes.some(word=>words.includes(word)))return 'experience';const empathy=['that must be','that sounds difficult','that sounds hard','that sounds frustrating','that s understandable','that is understandable','that s difficult','that is difficult','very difficult','difficult situation','must be difficult','must be frustrated','must be frustrating','very frustrated','understand that','understand how you feel','understand your situation'];if(empathy.some(phrase=>compact.includes(phrase)))return 'empathy';if(raw.includes('?'))return 'context';const meaningful=['try','talk','speak','write','note','landlord','police','think','feel','problem','noise','help','option','friendly'];if(words.length>=4||meaningful.some(word=>words.includes(word)))return 'context';return 'weak'}
 function transcriptText(){return turns.map(t=>t.role+': '+t.text).join('\\n')}
 async function playBase64Audio(base64){const bytes=Uint8Array.from(atob(base64),c=>c.charCodeAt(0));const buffer=await audioContext.decodeAudioData(bytes.buffer);await new Promise((resolve,reject)=>{const source=audioContext.createBufferSource();source.buffer=buffer;source.connect(audioContext.destination);source.onended=resolve;try{source.start()}catch(e){reject(e)}})}
 async function requestExaminerResponse(mode,latest='',opening=false,supportIndex=0){if(turnInFlight)return;turnInFlight=true;micTracks.forEach(t=>t.enabled=false);if(!opening)setStatus('responding');try{const response=await fetch('/api/examiner',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({opening,mode,latest,supportIndex,transcript:transcriptText()})});const raw=await response.text();let p;try{p=JSON.parse(raw)}catch{throw new Error(raw.slice(0,200)||'Could not prepare examiner audio.')}if(!response.ok)throw new Error(p.error||'Could not prepare examiner audio.');addTurn('Examiner',p.reply);await playBase64Audio(p.audio);if(opening){openingPending=false;beginTimer()}else if(status==='responding'){setStatus('active')}}catch(e){console.error(e);el('error').textContent=e.message||'Could not prepare examiner audio.';el('error').classList.remove('hidden');if(opening){showError(e.message||'Could not prepare examiner audio.')}else{setStatus('active')}}finally{turnInFlight=false;if(status==='active')micTracks.forEach(t=>t.enabled=true)}}
-function onEvent(event){if(event.type==='conversation.item.input_audio_transcription.completed'){if(openingPending||turnInFlight||status!=='active')return;const text=event.transcript||'';addTurn('Student',text);if(text.trim()){const kind=classifyStudentTurn(text);if(kind==='question'||kind==='advice'||kind==='comment'||kind==='experience'){weakTurnCount=0;requestExaminerResponse(kind,text)}else if(kind==='empathy'){weakTurnCount=0;requestExaminerResponse('empathy',text)}else{weakTurnCount++;if(weakTurnCount>=2&&supportCount<3){weakTurnCount=0;supportCount++;requestExaminerResponse('nudge',text,false,supportCount)}}}}if(event.type==='error'){console.error(event);showError('The voice connection reported an error. Please try again.')}}
+function onEvent(event){if(event.type==='conversation.item.input_audio_transcription.completed'){if(openingPending||turnInFlight||status!=='active')return;const text=event.transcript||'';addTurn('Student',text);if(text.trim()){const kind=classifyStudentTurn(text);if(kind!=='weak'){weakTurnCount=0;requestExaminerResponse(kind,text)}else{weakTurnCount++;if(weakTurnCount>=2&&supportCount<3){weakTurnCount=0;supportCount++;requestExaminerResponse('nudge',text,false,supportCount)}}}}if(event.type==='error'){console.error(event);showError('The voice connection reported an error. Please try again.')}}
 async function startTask(){stopConnection();turns=[];weakTurnCount=0;supportCount=0;remaining=TOTAL;updateTimer();el('turns').textContent='';el('feedback').textContent='';el('transcriptCard').classList.add('hidden');el('feedbackCard').classList.add('hidden');el('error').classList.add('hidden');setStatus('connecting');try{audioContext=new (window.AudioContext||window.webkitAudioContext)();await audioContext.resume();pc=new RTCPeerConnection();const stream=await navigator.mediaDevices.getUserMedia({audio:true,echoCancellation:true,noiseSuppression:true,autoGainControl:true});micTracks=stream.getAudioTracks();micTracks.forEach(t=>t.enabled=false);stream.getTracks().forEach(t=>pc.addTrack(t,stream));dc=pc.createDataChannel('oai-events');dc.onmessage=m=>onEvent(JSON.parse(m.data));const offer=await pc.createOffer();await pc.setLocalDescription(offer);const response=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/sdp'},body:offer.sdp});if(!response.ok){const p=await response.json();throw new Error(p.error||'Could not start session.')}await pc.setRemoteDescription({type:'answer',sdp:await response.text()});dc.onopen=()=>{setStatus('opening');openingPending=true;requestExaminerResponse('opening','',true)}}catch(e){console.error(e);stopConnection();showError(e.message||'Could not start the task.')}}
 async function getFeedback(){setStatus('feedback');el('error').classList.add('hidden');try{const transcript=turns.map(t=>t.role+': '+t.text).join('\\n');const response=await fetch('/api/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({transcript})});const raw=await response.text();let p;try{p=JSON.parse(raw)}catch{throw new Error(response.ok?'The feedback service returned an unreadable response.':raw.slice(0,240)||'Could not generate feedback.')}if(!response.ok)throw new Error(p.error||p.details||'Could not generate feedback.');el('feedback').textContent=p.feedback;el('feedbackCard').classList.remove('hidden');el('statusText').textContent='Feedback ready';el('repeat').classList.remove('hidden')}catch(e){showError(e.message||'Could not generate feedback.')}}
 el('start').onclick=startTask;el('finish').onclick=finishTask;el('getFeedback').onclick=getFeedback;el('repeat').onclick=startTask;updateTimer();setStatus('ready');
