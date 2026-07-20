@@ -16,7 +16,6 @@ HIDDEN FACTS
 
 ABSOLUTE RULES
 - Speak only English and answer the student's completed contribution directly.
-- Speak noticeably more slowly than normal conversation, with clear pauses between phrases.
 - Give one short sentence only. Prefer 5–12 words unless a direct answer genuinely requires more.
 - Never ask the student a question.
 - Never rescue, prompt, teach, correct, praise, summarise or suggest what to say.
@@ -25,7 +24,7 @@ ABSOLUTE RULES
 - If the student only repeats, hesitates, says “OK”, or leaves a thought unfinished, do not reveal any information.
 - If the interaction repeatedly stalls, you may say “I’m still not sure what to do.” Do not add anything else.
 - Do not interpret or complete unfinished language.
-- Use natural British English. Speak clearly and slowly.
+- Speak clearly and naturally for B2 English learners.
 - Answer only what the student actually asked or developed.
 - Reveal no more than one relevant hidden fact in a turn.
 - Never volunteer another fact, option, explanation or conversational route merely to keep the interaction moving.
@@ -76,9 +75,9 @@ async function createSession(request, env) {
     audio: {
       input: {
         transcription: { model: "gpt-4o-mini-transcribe", language: "en" },
-        turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 1200, create_response: false, interrupt_response: false },
+        turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 650, create_response: false, interrupt_response: false },
       },
-      output: { voice: "sage" },
+      output: { voice: "marin" },
     },
   };
 
@@ -115,7 +114,7 @@ async function createFeedback(request, env) {
 }
 
 const CONTROLLED_EXAMINER_INSTRUCTIONS = `Write exactly one reply for the examiner in a Trinity ISE II Collaborative Task.
-The examiner is the person with the noisy-neighbour dilemma. Stay in first person and use natural British English.
+The examiner is the person with the noisy-neighbour dilemma. Stay in first person and use natural English.
 
 AUTHORITATIVE FACTS
 - The neighbours moved in three months ago.
@@ -147,6 +146,7 @@ function cleanControlledReply(text, mode) {
 
 async function generateControlledReply({ latest, mode, transcript }, env) {
   if (mode === "nudge") return "I’m still not sure what to do.";
+  if (mode === "empathy") return "Thank you, it is very difficult.";
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
@@ -171,17 +171,17 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-async function synthesiseBritishSpeech(text, env) {
+async function synthesiseSpeech(text, env) {
   const response = await fetch("https://api.openai.com/v1/audio/speech", {
     method: "POST",
     headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "gpt-4o-mini-tts",
-      voice: "sage",
+      voice: "marin",
       input: text,
-      instructions: "Speak in a natural, educated contemporary British English accent. Sound like a real Trinity examiner in their forties: warm, composed, attentive and conversational. Use clear but natural pacing, subtle British intonation and realistic pauses. Avoid an American accent, exaggerated Received Pronunciation, theatrical delivery, sing-song intonation, over-enunciation, and robotic or synthetic-sounding pauses.",
+      instructions: "Speak clearly and naturally for B2 English learners. Use a slightly slower-than-normal conversational pace, short natural pauses, and clear pronunciation. Keep the delivery warm and human. Do not over-enunciate, stretch words, or use robotic pauses.",
       response_format: "mp3",
-      speed: 0.9,
+      speed: 1.0,
     }),
   });
   if (!response.ok) throw new Error("Could not create the examiner audio.");
@@ -192,7 +192,7 @@ async function createControlledExaminerTurn(request, env) {
   if (!env.OPENAI_API_KEY) return json({ error: "OPENAI_API_KEY is not configured." }, 500);
   const body = await request.json();
   const reply = body.opening ? TASK_OPENING : await generateControlledReply(body, env);
-  const audio = await synthesiseBritishSpeech(reply, env);
+  const audio = await synthesiseSpeech(reply, env);
   return json({ reply, audio, contentType: "audio/mpeg" });
 }
 
@@ -201,6 +201,7 @@ const HTML = `<!doctype html>
 <title>Simply English | Trinity ISE II Coach</title>
 <style>
 :root{--ink:#0F1722;--ocean:#41788B;--mist:#8CB8BA;--coral:#E47162;--paper:#FFFFFA;--muted:#66727a}*{box-sizing:border-box}html{background:var(--paper)}body{margin:0;color:var(--ink);background:radial-gradient(circle at 10% 5%,rgba(140,184,186,.22),transparent 25rem),radial-gradient(circle at 92% 28%,rgba(228,113,98,.10),transparent 22rem),var(--paper);font-family:Manrope,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button{font:inherit}main{width:min(760px,100%);margin:0 auto;padding:24px 18px 72px}.hero{padding:8px 4px 24px}.brand-logo{display:block;width:96px;height:96px;object-fit:cover;border-radius:50%;margin-bottom:16px;box-shadow:0 8px 24px rgba(15,23,34,.08)}.eyebrow{color:var(--ocean);font-size:.76rem;font-weight:800;letter-spacing:.12em;margin:8px 0}h1{font-size:clamp(2rem,8vw,3.6rem);line-height:.98;letter-spacing:-.045em;margin:10px 0 18px}h2{font-size:1.12rem;margin:5px 0}.intro{color:var(--muted);line-height:1.55;max-width:38rem}.card{background:rgba(255,255,255,.94);border:1px solid rgba(65,120,139,.18);border-radius:24px;box-shadow:0 18px 48px rgba(15,23,34,.08);padding:22px;margin-bottom:18px}.task-row{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}.label{color:var(--coral);font-size:.72rem;font-weight:900;letter-spacing:.14em}.timer{font-variant-numeric:tabular-nums;font-size:2rem;font-weight:800;color:var(--ocean)}.timer.warning{color:var(--coral)}.status{display:flex;align-items:center;gap:10px;background:rgba(140,184,186,.16);border-radius:14px;padding:13px 15px;margin:20px 0;color:var(--ink)}.dot{width:10px;height:10px;border-radius:50%;background:#aab4b8;flex:0 0 auto}.active .dot,.opening .dot{background:var(--coral);box-shadow:0 0 0 5px rgba(228,113,98,.14)}.finished .dot,.feedback .dot{background:var(--ocean)}.error .dot{background:#b42318}.controls{display:grid;gap:10px}.button{border:0;border-radius:14px;padding:15px 18px;font-weight:800;cursor:pointer;min-height:54px}.button:disabled{opacity:.45;cursor:not-allowed}.primary,.danger{background:var(--coral);color:white}.secondary{background:var(--mist);color:var(--ink)}.disclosure{color:var(--muted);font-size:.75rem;line-height:1.45;margin:16px 2px 0}.error-box{color:#8a1c13;background:#fff0ee;padding:12px 14px;border-radius:12px}.hidden{display:none!important}.turns{display:grid;gap:12px}.turn{border-radius:16px;padding:13px 15px;max-width:90%}.turn small{display:block;font-weight:900;letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px}.turn p{margin:0;line-height:1.5}.student{margin-left:auto;background:rgba(140,184,186,.18)}.examiner{background:rgba(228,113,98,.11)}.feedback-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65;font-size:.98rem}@media(min-width:560px){main{padding-top:36px}.controls{grid-template-columns:repeat(2,minmax(0,1fr))}.card{padding:28px}.brand-logo{width:112px;height:112px}}
+.responding .dot{background:var(--ocean);animation:ackPulse 1s ease-in-out infinite}@keyframes ackPulse{0%,100%{transform:scale(.85);box-shadow:0 0 0 3px rgba(65,120,139,.12)}50%{transform:scale(1.15);box-shadow:0 0 0 8px rgba(65,120,139,.18)}}
 </style></head><body><main>
 <section class="hero"><img class="brand-logo" src="/simply-english-logo.jpeg" alt="Simply English"><p class="eyebrow">TRINITY ISE II VOICE COACH</p><h1>Collaborative Task · Prototype</h1><p class="intro">A four-minute voice practice with patient turn detection and written feedback in Spanish.</p></section>
 <section class="card"><div class="task-row"><div><span class="label">PACK 1</span><h2>Task 1 · Noisy neighbours</h2></div><div id="timer" class="timer">4:00</div></div><div id="status" class="status ready"><span class="dot"></span><span id="statusText">Ready to begin</span></div><p id="error" class="error-box hidden"></p><div class="controls"><button id="start" class="button primary">Start Task 1</button><button id="finish" class="button danger hidden">Finish task</button><button id="getFeedback" class="button primary hidden">Get my feedback</button><button id="repeat" class="button secondary hidden">Repeat the same task</button></div><p class="disclosure">The examiner voice is AI-generated. Your microphone is used only during this practice session.</p></section>
@@ -208,8 +209,8 @@ const HTML = `<!doctype html>
 <section id="feedbackCard" class="card hidden"><p class="eyebrow">COACHING REPORT</p><div id="feedback" class="feedback-text"></div></section>
 </main><script>
 const OPENING=${JSON.stringify(TASK_OPENING)},TOTAL=240;let status='ready',remaining=TOTAL,turns=[],pc=null,dc=null,timerId=null,openingPending=false,micTracks=[],weakTurnCount=0,supportCount=0,audioContext=null,turnInFlight=false;
-const el=id=>document.getElementById(id);const labels={ready:'Ready to begin',connecting:'Connecting microphone…',opening:'Listen to the examiner’s opening',active:'Your task is in progress',finished:'Task finished — your transcript is ready',feedback:'Preparing your feedback…',error:'Something went wrong'};
-function setStatus(s){status=s;el('status').className='status '+s;el('statusText').textContent=labels[s]||s;el('start').classList.toggle('hidden',!['ready','error'].includes(s));el('finish').classList.toggle('hidden',!['connecting','opening','active'].includes(s));el('getFeedback').classList.toggle('hidden',s!=='finished');el('repeat').classList.toggle('hidden',!(s==='finished'||(s==='feedback'&&el('feedback').textContent)));}
+const el=id=>document.getElementById(id);const labels={ready:'Ready to begin',connecting:'Connecting microphone…',opening:'Listen to the examiner’s opening',active:'Your task is in progress',responding:'✓ Answer received — examiner is responding…',finished:'Task finished — your transcript is ready',feedback:'Preparing your feedback…',error:'Something went wrong'};
+function setStatus(s){status=s;el('status').className='status '+s;el('statusText').textContent=labels[s]||s;el('start').classList.toggle('hidden',!['ready','error'].includes(s));el('finish').classList.toggle('hidden',!['connecting','opening','active','responding'].includes(s));el('getFeedback').classList.toggle('hidden',s!=='finished');el('repeat').classList.toggle('hidden',!(s==='finished'||(s==='feedback'&&el('feedback').textContent)));}
 function showError(message){el('error').textContent=message;el('error').classList.remove('hidden');setStatus('error')}
 function updateTimer(){el('timer').textContent=Math.floor(remaining/60)+':'+String(remaining%60).padStart(2,'0');el('timer').classList.toggle('warning',remaining<=30&&status==='active')}
 function stopConnection(){if(timerId)clearInterval(timerId);timerId=null;if(dc)dc.close();if(pc){pc.getSenders().forEach(s=>s.track&&s.track.stop());pc.close()}if(audioContext)audioContext.close();dc=null;pc=null;micTracks=[];audioContext=null;turnInFlight=false}
@@ -219,8 +220,8 @@ function addTurn(role,text){if(!text.trim())return;turns.push({role,text});const
 function classifyStudentTurn(text){const raw=(text||'').trim();if(!raw)return 'weak';const words=raw.toLowerCase().replace(/[^a-z0-9' ]/g,' ').split(' ').filter(Boolean);const compact=words.join(' ');if(raw.includes('?'))return 'question';const questionStarts=new Set(['who','what','when','where','why','how','do','does','did','is','are','was','were','can','could','would','will','have','has','had']);if(questionStarts.has(words[0]))return 'question';const advice=['maybe','perhaps','i think','you could','you should','you might','you need','you have to','if i were','have you thought','why don t you'];if(advice.some(phrase=>compact.includes(phrase)))return 'advice';const empathy=['that must be','that sounds','very difficult','difficult situation','must be difficult','must be frustrating','very frustrated','understand how you feel','similar situation','similar problem','same problem','happened to me'];if(empathy.some(phrase=>compact.includes(phrase)))return 'empathy';if(words.length>=8)return 'comment';return 'weak'}
 function transcriptText(){return turns.map(t=>t.role+': '+t.text).join('\\n')}
 async function playBase64Audio(base64){const bytes=Uint8Array.from(atob(base64),c=>c.charCodeAt(0));const buffer=await audioContext.decodeAudioData(bytes.buffer);await new Promise((resolve,reject)=>{const source=audioContext.createBufferSource();source.buffer=buffer;source.connect(audioContext.destination);source.onended=resolve;try{source.start()}catch(e){reject(e)}})}
-async function requestExaminerResponse(mode,latest='',opening=false){if(turnInFlight)return;turnInFlight=true;micTracks.forEach(t=>t.enabled=false);try{const response=await fetch('/api/examiner',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({opening,mode,latest,transcript:transcriptText()})});const raw=await response.text();let p;try{p=JSON.parse(raw)}catch{throw new Error(raw.slice(0,200)||'Could not prepare examiner audio.')}if(!response.ok)throw new Error(p.error||'Could not prepare examiner audio.');addTurn('Examiner',p.reply);await playBase64Audio(p.audio);if(opening){openingPending=false;beginTimer()}}catch(e){console.error(e);showError(e.message||'Could not prepare examiner audio.')}finally{turnInFlight=false;if(status==='active')micTracks.forEach(t=>t.enabled=true)}}
-function onEvent(event){if(event.type==='conversation.item.input_audio_transcription.completed'){const text=event.transcript||'';addTurn('Student',text);if(!openingPending&&status==='active'&&!turnInFlight){const kind=classifyStudentTurn(text);if(kind==='question'||kind==='advice'||kind==='comment'){weakTurnCount=0;requestExaminerResponse(kind,text)}else if(kind==='empathy'){weakTurnCount=0;requestExaminerResponse('empathy',text)}else{weakTurnCount++;if(weakTurnCount>=2&&supportCount<2){weakTurnCount=0;supportCount++;requestExaminerResponse('nudge',text)}}}}if(event.type==='error'){console.error(event);showError('The voice connection reported an error. Please try again.')}}
+async function requestExaminerResponse(mode,latest='',opening=false){if(turnInFlight)return;turnInFlight=true;micTracks.forEach(t=>t.enabled=false);if(!opening)setStatus('responding');try{const response=await fetch('/api/examiner',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({opening,mode,latest,transcript:transcriptText()})});const raw=await response.text();let p;try{p=JSON.parse(raw)}catch{throw new Error(raw.slice(0,200)||'Could not prepare examiner audio.')}if(!response.ok)throw new Error(p.error||'Could not prepare examiner audio.');addTurn('Examiner',p.reply);await playBase64Audio(p.audio);if(opening){openingPending=false;beginTimer()}else if(status==='responding'){setStatus('active')}}catch(e){console.error(e);el('error').textContent=e.message||'Could not prepare examiner audio.';el('error').classList.remove('hidden');if(opening){showError(e.message||'Could not prepare examiner audio.')}else{setStatus('active')}}finally{turnInFlight=false;if(status==='active')micTracks.forEach(t=>t.enabled=true)}}
+function onEvent(event){if(event.type==='conversation.item.input_audio_transcription.completed'){if(openingPending||turnInFlight||status!=='active')return;const text=event.transcript||'';addTurn('Student',text);if(text.trim()){const kind=classifyStudentTurn(text);if(kind==='question'||kind==='advice'||kind==='comment'){weakTurnCount=0;requestExaminerResponse(kind,text)}else if(kind==='empathy'){weakTurnCount=0;requestExaminerResponse('empathy',text)}else{weakTurnCount++;if(weakTurnCount>=2&&supportCount<2){weakTurnCount=0;supportCount++;requestExaminerResponse('nudge',text)}}}}if(event.type==='error'){console.error(event);showError('The voice connection reported an error. Please try again.')}}
 async function startTask(){stopConnection();turns=[];weakTurnCount=0;supportCount=0;remaining=TOTAL;updateTimer();el('turns').textContent='';el('feedback').textContent='';el('transcriptCard').classList.add('hidden');el('feedbackCard').classList.add('hidden');el('error').classList.add('hidden');setStatus('connecting');try{audioContext=new (window.AudioContext||window.webkitAudioContext)();await audioContext.resume();pc=new RTCPeerConnection();const stream=await navigator.mediaDevices.getUserMedia({audio:true,echoCancellation:true,noiseSuppression:true,autoGainControl:true});micTracks=stream.getAudioTracks();micTracks.forEach(t=>t.enabled=false);stream.getTracks().forEach(t=>pc.addTrack(t,stream));dc=pc.createDataChannel('oai-events');dc.onmessage=m=>onEvent(JSON.parse(m.data));const offer=await pc.createOffer();await pc.setLocalDescription(offer);const response=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/sdp'},body:offer.sdp});if(!response.ok){const p=await response.json();throw new Error(p.error||'Could not start session.')}await pc.setRemoteDescription({type:'answer',sdp:await response.text()});dc.onopen=()=>{setStatus('opening');openingPending=true;requestExaminerResponse('opening','',true)}}catch(e){console.error(e);stopConnection();showError(e.message||'Could not start the task.')}}
 async function getFeedback(){setStatus('feedback');el('error').classList.add('hidden');try{const transcript=turns.map(t=>t.role+': '+t.text).join('\\n');const response=await fetch('/api/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({transcript})});const raw=await response.text();let p;try{p=JSON.parse(raw)}catch{throw new Error(response.ok?'The feedback service returned an unreadable response.':raw.slice(0,240)||'Could not generate feedback.')}if(!response.ok)throw new Error(p.error||p.details||'Could not generate feedback.');el('feedback').textContent=p.feedback;el('feedbackCard').classList.remove('hidden');el('statusText').textContent='Feedback ready';el('repeat').classList.remove('hidden')}catch(e){showError(e.message||'Could not generate feedback.')}}
 el('start').onclick=startTask;el('finish').onclick=finishTask;el('getFeedback').onclick=getFeedback;el('repeat').onclick=startTask;updateTimer();setStatus('ready');
