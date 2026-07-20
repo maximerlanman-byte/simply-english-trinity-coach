@@ -160,7 +160,7 @@ async function createSession(request, env) {
     audio: {
       input: {
         transcription: { model: "gpt-4o-mini-transcribe", language: "en" },
-        turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 800, create_response: false, interrupt_response: false },
+        turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 1100, create_response: false, interrupt_response: false },
       },
       output: { voice: "marin" },
     },
