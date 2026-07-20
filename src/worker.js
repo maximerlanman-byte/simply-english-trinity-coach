@@ -2,7 +2,7 @@ const TASK_OPENING = "My new neighbours regularly make noise late at night, but 
 
 const TASKS = [
   { id: "level-1-task-1", level: 1, number: 1, title: "Noisy neighbours", opening: TASK_OPENING, facts: ["You rent a flat, and the neighbours moved into the flat next door three months ago.", "Loud music happens two or three nights a week.", "You start work early.", "You spoke to them once; they apologised, but the noise continued.", "They seem friendly during the day.", "Other neighbours are also affected."], options: ["speak again", "write a polite message", "involve the landlord"] },
-  { id: "level-1-task-2", level: 1, number: 2, title: "Adopting a dog", opening: "My family wants to adopt a dog, but I’m worried that I’ll eventually have to do all the work.", facts: ["You are a parent living with your partner and two teenagers.", "Your partner and both teenagers want the dog and promise to help.", "You live in a flat near a park.", "The dog is young and energetic.", "Nobody in the family has owned a dog before.", "You work from home three days a week."], options: ["adopt", "foster first", "choose an older dog", "wait"] },
+  { id: "level-1-task-2", level: 1, number: 2, title: "Adopting a dog", opening: "My family wants to adopt a dog, but I’m worried that I’ll eventually have to do all the work.", facts: ["You are a parent living with your partner and two teenagers.", "Your partner and both teenagers want the dog and promise to help.", "The teenagers are at school on weekdays, and your partner usually works away from home during the day.", "You live in a flat near a park.", "The dog is young and energetic.", "Nobody in the family has owned a dog before.", "You work from home three days a week."], options: ["adopt", "foster first", "choose an older dog", "wait"] },
   { id: "level-1-task-3", level: 1, number: 3, title: "First smartphone", opening: "My twelve-year-old daughter wants her first smartphone, but I’m not sure she is ready for one.", facts: ["You are her parent and share major parenting decisions with your partner; your partner's view is not yet settled.", "Most of her friends already have phones.", "She travels to school alone.", "She currently uses a family tablet at home.", "An online argument upset her recently.", "The cost is affordable."], options: ["basic phone", "smartphone with controls", "trial period", "wait"] },
   { id: "level-1-task-4", level: 1, number: 4, title: "Faulty online purchase", opening: "I bought an expensive laptop online, but it arrived damaged and the seller has stopped replying.", facts: ["It cost €850.", "The advert described it as being in excellent condition.", "The battery is weak and the screen is damaged.", "You paid by bank transfer.", "You saved the advert and messages."], options: ["platform complaint", "contact the bank", "consumer advice", "repair estimate"] },
   { id: "level-1-task-5", level: 1, number: 5, title: "Holiday booking", opening: "I paid for a weekend break, but the hotel says it has no record of my reservation.", facts: ["The trip is with your partner and is due to begin in three weeks.", "Your work commitments make changing the dates difficult.", "You paid €400 through a small travel agency.", "You have a confirmation email.", "The hotel is now full.", "The agency blames the hotel.", "They offered a cheaper hotel far from the centre."], options: ["accept", "demand an equivalent hotel", "request a refund", "contact the card provider"] },
@@ -20,7 +20,7 @@ const TASKS = [
   { id: "level-2-task-17", level: 2, number: 17, title: "Family celebration conflict", opening: "Two members of my family are refusing to attend the same important celebration, and both expect me to take their side.", facts: ["You are organising your mother’s seventieth birthday, which is one month away.", "Your brother and cousin argued over money last year.", "Neither has apologised.", "Your mother knows little about the conflict.", "Separate celebrations would upset her."], options: ["mediate", "set behaviour rules", "invite both without intervention", "hold separate events"] },
   { id: "level-2-task-18", level: 2, number: 18, title: "Car or public transport", opening: "I want to stop using my car so much, but public transport where I live is unreliable and giving it up could make daily life difficult.", facts: ["You commute twenty kilometres.", "The bus takes twice as long and is sometimes cancelled.", "Parking and fuel are expensive.", "Cycling is possible only part of the route.", "Your employer allows one remote-working day per week.", "A colleague who lives nearby is open to discussing car-sharing."], options: ["car-share", "mixed transport", "remote work days", "keep the car but reduce use"] },
   { id: "level-2-task-19", level: 2, number: 19, title: "Promotion and colleague", opening: "I’ve been encouraged to apply for a promotion, but a close colleague wants the same position and I’m worried it could damage our relationship.", facts: ["You have slightly more experience.", "The colleague has stronger technical qualifications.", "You have supported each other for years.", "Only one internal candidate will be selected.", "Your manager approached you privately, and your colleague does not know this.", "Applications close in two weeks."], options: ["apply openly", "speak to the colleague first", "withdraw", "encourage mutual professionalism"] },
-  { id: "level-2-task-20", level: 2, number: 20, title: "Adopting a pet", opening: "My family wants to adopt a dog, but I’m concerned that the responsibility will eventually fall almost entirely on me.", facts: ["You are a parent living with your partner and two teenagers.", "Your partner and both teenagers want the dog and promise to help.", "The family lives in a flat but near a park.", "You work from home three days a week.", "The proposed dog is young and energetic.", "The family has never owned a dog."], options: ["adopt", "foster first", "choose an older dog", "wait", "create a written responsibility plan"] },
+  { id: "level-2-task-20", level: 2, number: 20, title: "Local library closure", opening: "The council plans to close our local library to save money, but many residents still depend on it.", facts: ["You are a local resident who uses the library most weeks and have no formal role in the council.", "The council says the building needs expensive repairs and usage has fallen.", "Many older residents, students and families use its computers, study space and staff support.", "The council proposes online services and a small book-collection point instead.", "The final decision is expected in six weeks."], options: ["organise a petition", "propose reduced opening hours", "seek community funding", "create a shared community hub", "accept the digital alternative"] },
 ];
 
 function getTask(taskId) {
@@ -51,7 +51,7 @@ CONTROLLED IMPROVISATION
 
 RULES
 - Speak only English and address the student's latest completed contribution directly.
-- Give exactly one short sentence of no more than 16 words${concise ? "; output only the words to be spoken" : ""}.
+- Give exactly one short sentence of no more than 20 words${concise ? "; return it in the required structured field" : ""}.
 - Use natural contractions and varied conversational wording; do not repeat an examiner sentence from the transcript.
 - Ask no leading or topic-changing question. One brief reactive question after a volunteered personal experience is allowed.
 - Usually follow the student's lead; limited initiative is allowed when it sounds natural.
@@ -108,6 +108,11 @@ const FEEDBACK_INSTRUCTIONS = `You are an expert speaking coach for the current 
 Assess only the supplied transcript. Explain everything in clear Spanish; keep corrections and suggested candidate language in English.
 Be supportive but completely honest. Do not award an official Trinity score or promise a pass.
 
+IDIOMA OBLIGATORIO
+- Write every heading, judgment, explanation, reason and coaching comment in Spanish.
+- English is allowed only for exact transcript quotations, corrected English and suggested candidate phrases.
+- Never write explanatory bullets or assessment paragraphs in English.
+
 MOBILE FORMAT
 - Never use tables or columns.
 - Use concise headings, short paragraphs, bullets and stacked correction blocks.
@@ -132,6 +137,8 @@ FAIRNESS
 - If the examiner occasionally introduced one relevant option, note it accurately but do not automatically treat the whole interaction as examiner-led.
 - Short student turns show limited development, not automatically examiner support.
 - Do not invent quotations or correct a sentence that was already correct.
+- This is spoken practice: ignore capitalization, punctuation and formatting introduced by automatic transcription.
+- Never present a capitalization or punctuation-only change as an English correction.
 - Judge relevance in context, not in isolation.`;
 
 function json(data, status = 200) {
@@ -153,7 +160,7 @@ async function createSession(request, env) {
     audio: {
       input: {
         transcription: { model: "gpt-4o-mini-transcribe", language: "en" },
-        turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 650, create_response: false, interrupt_response: false },
+        turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 800, create_response: false, interrupt_response: false },
       },
       output: { voice: "marin" },
     },
@@ -220,8 +227,8 @@ CONTROLLED IMPROVISATION
 - Keep unknowns unknown: do not assert the neighbours' age, motives, schedule or whether anyone else has complained.
 
 RULES
-- Output only the words to be spoken: no label, quotation marks or explanation.
-- Use one short sentence of no more than 16 words.
+- Return the detected intent and words to be spoken in the required structured format.
+- Use one short sentence of no more than 20 words.
 - Address only the student's latest contribution.
 - Never ask a leading or topic-changing question, teach, praise, correct, rescue or provide a conversational route.
 - After the student volunteers a personal experience, one brief reactive question such as “Oh, really?” is allowed.
@@ -231,22 +238,56 @@ RULES
 - “That might be worth trying” is allowed, but use it at most once in the complete conversation.
 - If the contribution is ambiguous, respond cautiously without inventing a fact or conversational route.
 - For a question: answer it directly with at most one fact or one safe minor improvised detail.
+- A direct question must receive a direct answer, not a generic acknowledgment. If the requested detail is genuinely unknown, say so naturally.
 - For advice: respond naturally with one agreement, reservation, preference or minor plan.
 - For a developed comment: acknowledge it naturally and, when useful, add one consistent reaction.
 - For empathy or a brief expression of understanding: acknowledge it naturally; add a short relevant link to the dilemma only when it helps the flow.
 - For rapport or a shared preference, respond warmly and briefly without praise or taking over the conversation.
 - Never use a decision fallback such as “I’d have to think about that” after empathy, understanding or rapport.`;
 
-function cleanControlledReply(text, mode, transcript = "") {
+const EXAMINER_REPLY_FORMAT = {
+  type: "json_schema",
+  name: "examiner_reply",
+  strict: true,
+  schema: {
+    type: "object",
+    properties: {
+      intent: { type: "string", enum: ["question", "advice", "empathy", "agreement", "rapport", "experience", "development"] },
+      reply: { type: "string" },
+    },
+    required: ["intent", "reply"],
+    additionalProperties: false,
+  },
+};
+
+function validateControlledReply(draft, transcript = "", expectedIntent = "") {
+  const intent = String(draft?.intent || "");
+  const reply = String(draft?.reply || "").replace(/^[\s“”"']+|[\s“”"']+$/g, "").split(/\r?\n/)[0].trim();
   const used = String(transcript).toLowerCase();
-  const neutralFallbacks = ["I see what you mean.", "Yes, that makes sense.", "I understand your point."];
-  const fallback = neutralFallbacks.find((item) => !used.includes(item.toLowerCase())) || "I see.";
-  const reply = String(text || "").replace(/^[\s“”"']+|[\s“”"']+$/g, "").split(/\r?\n/)[0].trim();
-  const recentExaminerReplies = String(transcript).split(/\r?\n/).filter((line) => line.startsWith("Examiner: ")).slice(-4).map((line) => line.slice(10).trim().toLowerCase());
-  const repeatedStockReply = reply.toLowerCase() === "that might be worth trying." && used.includes("that might be worth trying.");
-  const rescueQuestion = /\b(what (do|would|should|could) you|what about|how about|any advice)\b/i.test(reply);
-  if (!reply || reply.split(/\s+/).length > 16 || /^(examiner|reply)\s*:/i.test(reply) || rescueQuestion || repeatedStockReply || recentExaminerReplies.includes(reply.toLowerCase())) return fallback;
-  return reply;
+  const recent = String(transcript).split(/\r?\n/).filter((line) => line.startsWith("Examiner: ")).slice(-4).map((line) => line.slice(10).trim().toLowerCase());
+  if (expectedIntent && intent !== expectedIntent) return { valid: false, reason: `keep the detected intent ${expectedIntent}`, intent, reply };
+  if (!reply) return { valid: false, reason: "the reply was empty", intent, reply };
+  if (reply.split(/\s+/).length > 20) return { valid: false, reason: "the reply exceeded 20 words", intent, reply };
+  if (/^(examiner|reply)\s*:/i.test(reply)) return { valid: false, reason: "the reply contained a label", intent, reply };
+  if (/\b(what (do|would|should|could) you|what about|how about|any advice)\b/i.test(reply)) return { valid: false, reason: "the reply improperly rescued or redirected the student", intent, reply };
+  if (reply.toLowerCase() === "that might be worth trying." && used.includes("that might be worth trying.")) return { valid: false, reason: "the stock reply was already used", intent, reply };
+  if (recent.includes(reply.toLowerCase())) return { valid: false, reason: "the reply repeated a recent examiner turn", intent, reply };
+  if (intent === "question" && /^(i see|yes|right|okay|that makes sense|i understand)\b/i.test(reply)) return { valid: false, reason: "a direct question received only a generic acknowledgment", intent, reply };
+  if (intent === "question" && reply.includes("?")) return { valid: false, reason: "a direct question must receive an answer rather than another question", intent, reply };
+  return { valid: true, intent, reply };
+}
+
+async function requestExaminerDraft({ instructions, input }, env) {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "gpt-4.1-mini", max_output_tokens: 100, instructions, input, text: { format: EXAMINER_REPLY_FORMAT } }),
+  });
+  const raw = await response.text();
+  let payload;
+  try { payload = JSON.parse(raw); } catch { throw new Error(`Examiner text service returned ${response.status}.`); }
+  if (!response.ok) throw new Error(payload?.error?.message || "Could not prepare the examiner reply.");
+  try { return JSON.parse(extractOutputText(payload)); } catch { throw new Error("Examiner text service returned an invalid structured reply."); }
 }
 
 async function generateControlledReply({ latest, mode, transcript, supportIndex, taskId }, env) {
@@ -254,21 +295,16 @@ async function generateControlledReply({ latest, mode, transcript, supportIndex,
     const nudges = ["I’m still not sure what to do.", "I can’t decide what would be best.", "What do you think I should do?"];
     return nudges[Math.min(Math.max(Number(supportIndex || 1) - 1, 0), nudges.length - 1)];
   }
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "gpt-4.1-mini",
-      max_output_tokens: 60,
-      instructions: buildTaskInstructions(getTask(taskId), true),
-      input: `Latest student contribution: ${latest}\n\nConversation so far (infer the student's intent and avoid repeating examiner wording):\n${String(transcript || "").slice(-5000)}`,
-    }),
-  });
-  const raw = await response.text();
-  let payload;
-  try { payload = JSON.parse(raw); } catch { throw new Error(`Examiner text service returned ${response.status}.`); }
-  if (!response.ok) throw new Error(payload?.error?.message || "Could not prepare the examiner reply.");
-  return cleanControlledReply(extractOutputText(payload), mode, transcript);
+  const instructions = buildTaskInstructions(getTask(taskId), true);
+  const input = `Identify the student's communicative intent and respond to the latest contribution.\nLatest student contribution: ${latest}\n\nConversation so far (avoid repeating examiner wording):\n${String(transcript || "").slice(-5000)}`;
+  const firstDraft = await requestExaminerDraft({ instructions, input }, env);
+  const firstCheck = validateControlledReply(firstDraft, transcript);
+  if (firstCheck.valid) return firstCheck.reply;
+  const retryInput = `${input}\n\nYour first draft detected intent "${firstCheck.intent}" but was rejected because ${firstCheck.reason}. Rewrite it once, preserving that intent and the storyline. Rejected reply: ${firstCheck.reply}`;
+  const secondDraft = await requestExaminerDraft({ instructions, input: retryInput }, env);
+  const secondCheck = validateControlledReply(secondDraft, transcript, firstCheck.intent);
+  if (!secondCheck.valid) throw new Error(`Could not prepare a valid examiner reply: ${secondCheck.reason}.`);
+  return secondCheck.reply;
 }
 
 function arrayBufferToBase64(buffer) {
