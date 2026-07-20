@@ -78,7 +78,7 @@ async function createSession(request, env) {
         transcription: { model: "gpt-4o-mini-transcribe", language: "en" },
         turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 1200, create_response: false, interrupt_response: false },
       },
-      output: { voice: "marin" },
+      output: { voice: "sage" },
     },
   };
 
@@ -177,9 +177,9 @@ async function synthesiseBritishSpeech(text, env) {
     headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "gpt-4o-mini-tts",
-      voice: "cedar",
+      voice: "sage",
       input: text,
-      instructions: "Speak in a clear contemporary British English accent, slightly slowly, with natural examiner-like delivery.",
+      instructions: "Speak in a natural, educated contemporary British English accent. Sound like a real Trinity examiner in their forties: warm, composed, attentive and conversational. Use clear but natural pacing, subtle British intonation and realistic pauses. Avoid an American accent, exaggerated Received Pronunciation, theatrical delivery, sing-song intonation, over-enunciation, and robotic or synthetic-sounding pauses.",
       response_format: "mp3",
       speed: 0.9,
     }),
