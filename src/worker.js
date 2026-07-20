@@ -13,6 +13,12 @@ HIDDEN FACTS
 - You spoke to them once. They apologised, but the noise continued.
 - You are considering speaking to them again, leaving a polite written message, contacting the landlord, or making a formal complaint.
 - You dislike confrontation and do not want a hostile relationship.
+- You rent a flat in a small building, and the neighbours live next door on the same floor.
+- The walls are thin, and the bass is especially noticeable in your bedroom.
+- You have tried closing the windows and using earplugs, but neither solves the problem.
+- You normally contact the landlord by email about practical matters.
+- The landlord has always been polite and usually replies within a few days, but you are not close.
+- As far as you know, no other neighbour has made a complaint.
 
 ABSOLUTE RULES
 - Speak only English and answer the student's completed contribution directly.
@@ -127,6 +133,12 @@ AUTHORITATIVE FACTS
 - The examiner spoke to them once. They apologised, but the noise continued.
 - Possible options are speaking again, a polite written message, contacting the landlord, or a formal complaint.
 - The examiner dislikes confrontation and wants to avoid hostility.
+- The examiner rents a flat in a small building; the noisy neighbours live next door on the same floor.
+- The walls are thin, and the bass is especially noticeable in the examiner's bedroom.
+- Closing the windows and using earplugs have not solved the problem.
+- The examiner normally contacts the landlord by email about practical matters.
+- The landlord has always been polite and usually replies within a few days, but they are not close.
+- The examiner does not know whether anyone else has complained.
 
 RULES
 - Output only the words to be spoken: no label, quotation marks or explanation.
@@ -164,11 +176,16 @@ async function generateControlledReply({ latest, mode, transcript, supportIndex 
   }
   if (mode === "advice") {
     if (/note|message|write/.test(compact) && /enough/.test(compact)) return "I’m not sure a note would be enough.";
+    if (/cookie|cake|gift/.test(compact)) return "Talking might help, but bringing something could feel awkward.";
     if (/talk|speak/.test(compact) && /again|one more/.test(compact)) return "Yes, I could try speaking to them again.";
     if (/note|message|write/.test(compact)) return "A polite message might be worth trying.";
     if (/landlord/.test(compact)) return "I’m not sure I’m ready for that.";
     if (/complain|complaint|police/.test(compact)) return "That feels a little too confrontational for me.";
     return "That might be worth trying.";
+  }
+  if (mode === "question") {
+    if (/what.*(say|tell)|how.*(say|explain)/.test(compact)) return "I could politely explain that the noise is affecting my sleep.";
+    if (/(relationship|know|get on).*(landlord)|(landlord).*(relationship|know|get on)/.test(compact)) return "We’re not close, but our contact has always been polite.";
   }
   if (mode === "comment") {
     if (/sounds good|good idea|that could work|might work/.test(compact)) return "Yes, I think so too.";
@@ -243,7 +260,7 @@ function stopConnection(){if(timerId)clearInterval(timerId);timerId=null;if(dc)d
 function finishTask(){stopConnection();remaining=0;updateTimer();el('transcriptCard').classList.remove('hidden');setStatus('finished')}
 function beginTimer(){if(timerId)return;setStatus('active');timerId=setInterval(()=>{remaining--;updateTimer();if(remaining<=0)finishTask()},1000)}
 function addTurn(role,text){if(!text.trim())return;turns.push({role,text});const box=document.createElement('div');box.className='turn '+role.toLowerCase();const who=document.createElement('small');who.textContent=role;const p=document.createElement('p');p.textContent=text;box.append(who,p);el('turns').appendChild(box)}
-function classifyStudentTurn(text){const raw=(text||'').trim();if(!raw)return 'weak';const words=raw.toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(' ').filter(Boolean);const compact=words.join(' ');const advice=['maybe','perhaps','i think','you could','you should','you might','you need','you have to','if i were','have you thought','why don t you','what about if'];if(advice.some(phrase=>compact.includes(phrase)))return 'advice';const experiences=['i had','i have had','happened to me','in my experience','my neighbour','my neighbor','similar situation','similar problem','same problem'];const outcomes=['helped','worked','solved'];if(experiences.some(phrase=>compact.includes(phrase))||outcomes.some(word=>words.includes(word)))return 'experience';if((compact.includes('do you think')||compact.includes('would it'))&&/(note|message|police|landlord|talk|speak|complain)/.test(compact))return 'advice';if(raw.includes('?'))return 'question';const questionStarts=new Set(['who','what','when','where','why','how','do','does','did','is','are','was','were','can','could','would','will','have','has','had']);if(questionStarts.has(words[0]))return 'question';const empathy=['that must be','that sounds difficult','that sounds hard','that sounds frustrating','that s understandable','that is understandable','that s difficult','that is difficult','very difficult','difficult situation','must be difficult','must be frustrated','must be frustrating','very frustrated','understand that','understand how you feel','understand your situation'];if(empathy.some(phrase=>compact.includes(phrase)))return 'empathy';const briefComments=['sounds good','good idea','that could work','might work'];if(briefComments.some(phrase=>compact.includes(phrase)))return 'comment';if(words.length>=8)return 'comment';return 'weak'}
+function classifyStudentTurn(text){const raw=(text||'').trim();if(!raw)return 'weak';const words=raw.toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(' ').filter(Boolean);const compact=words.join(' ');const experiences=['i had','i have had','happened to me','in my experience','my neighbour','my neighbor','similar situation','similar problem','same problem'];const outcomes=['helped','worked','solved'];if(experiences.some(phrase=>compact.includes(phrase))||outcomes.some(word=>words.includes(word)))return 'experience';const explicitAdvice=['maybe','perhaps','if i were','have you thought','why don t you','what about if'];if(explicitAdvice.some(phrase=>compact.includes(phrase)))return 'advice';if((compact.includes('do you think')||compact.includes('would it'))&&/(note|message|police|landlord|talk|speak|complain)/.test(compact))return 'advice';if(raw.includes('?'))return 'question';const questionStarts=new Set(['who','what','when','where','why','how','do','does','did','is','are','was','were','can','could','would','will','have','has','had']);if(questionStarts.has(words[0]))return 'question';const advice=['i think','you could','you should','you might','you need','you have to'];if(advice.some(phrase=>compact.includes(phrase)))return 'advice';const empathy=['that must be','that sounds difficult','that sounds hard','that sounds frustrating','that s understandable','that is understandable','that s difficult','that is difficult','very difficult','difficult situation','must be difficult','must be frustrated','must be frustrating','very frustrated','understand that','understand how you feel','understand your situation'];if(empathy.some(phrase=>compact.includes(phrase)))return 'empathy';const briefComments=['sounds good','good idea','that could work','might work'];if(briefComments.some(phrase=>compact.includes(phrase)))return 'comment';if(words.length>=8)return 'comment';return 'weak'}
 function transcriptText(){return turns.map(t=>t.role+': '+t.text).join('\\n')}
 async function playBase64Audio(base64){const bytes=Uint8Array.from(atob(base64),c=>c.charCodeAt(0));const buffer=await audioContext.decodeAudioData(bytes.buffer);await new Promise((resolve,reject)=>{const source=audioContext.createBufferSource();source.buffer=buffer;source.connect(audioContext.destination);source.onended=resolve;try{source.start()}catch(e){reject(e)}})}
 async function requestExaminerResponse(mode,latest='',opening=false,supportIndex=0){if(turnInFlight)return;turnInFlight=true;micTracks.forEach(t=>t.enabled=false);if(!opening)setStatus('responding');try{const response=await fetch('/api/examiner',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({opening,mode,latest,supportIndex,transcript:transcriptText()})});const raw=await response.text();let p;try{p=JSON.parse(raw)}catch{throw new Error(raw.slice(0,200)||'Could not prepare examiner audio.')}if(!response.ok)throw new Error(p.error||'Could not prepare examiner audio.');addTurn('Examiner',p.reply);await playBase64Audio(p.audio);if(opening){openingPending=false;beginTimer()}else if(status==='responding'){setStatus('active')}}catch(e){console.error(e);el('error').textContent=e.message||'Could not prepare examiner audio.';el('error').classList.remove('hidden');if(opening){showError(e.message||'Could not prepare examiner audio.')}else{setStatus('active')}}finally{turnInFlight=false;if(status==='active')micTracks.forEach(t=>t.enabled=true)}}
