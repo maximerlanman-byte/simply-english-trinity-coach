@@ -1,6 +1,6 @@
 # Simply English Trinity ISE II Coach — Prototype
 
-Task 1 voice prototype using OpenAI Realtime WebRTC and the Responses API. It includes both a Vercel Edge entry point and a native Cloudflare Worker build.
+Voice practice coach with 20 Trinity ISE II Collaborative Tasks across two selectable levels. Each task uses an exact opening, fixed canon, controlled improvisation, OpenAI Realtime WebRTC, contextual examiner replies and written feedback in Spanish. The project includes both a Vercel Edge entry point and a native Cloudflare Worker build.
 
 ## Deploy on Vercel
 
