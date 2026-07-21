@@ -87,6 +87,7 @@ ${taskCanon(task)}
 
 CONTROLLED IMPROVISATION
 - You may improvise one minor everyday detail when it directly helps answer the student: timing, wording, routine, preference, emotion or a small practical plan.
+- You may also improvise a brief, ordinary piece of personal background when the student asks a relevant rapport question, such as whether you have done a similar activity before.
 - Once introduced, that detail becomes true for this conversation. Read the transcript and preserve continuity.
 - You may occasionally introduce one relevant option after genuine uncertainty or a stall, but never offer several routes and never repeatedly carry the interaction.
 - Never invent consequential events such as threats, crime, children, illness, eviction, police involvement or legal action unless the fixed canon requires them.
@@ -142,7 +143,7 @@ ABSOLUTE RULES
 - If the interaction repeatedly stalls, you may say “I’m still not sure what to do.” Do not add anything else.
 - Do not interpret or complete unfinished language.
 - If the completed contribution is unintelligible or has no recoverable meaning, ask the student to repeat it in one natural sentence.
-- If the words are understandable but clearly do not connect to the situation, briefly signal the misunderstanding and restate the central problem in different words.
+- If the words are understandable but clearly do not connect to the situation, say that you are not sure what the student means and restate the central problem in different words.
 - A repair turn must not reveal a new option, invent a fact or continue as though the contribution made sense.
 - Speak clearly and naturally for B2 English learners.
 - Answer only what the student actually asked or developed.
@@ -313,8 +314,9 @@ RULES
 - After the student volunteers a personal experience, one brief reactive question such as “Oh, really?” is allowed.
 - Never contradict the fixed canon or a detail already established in the transcript.
 - Infer the student's communicative intent from their actual words and the conversation: question, advice, empathy, agreement, rapport, personal experience, development, unclear speech or off-topic misunderstanding.
+- Use off_topic only when the completed contribution has understandable words but cannot reasonably connect to the dilemma, its people, causes, consequences, feelings or possible responses. A broad opinion question or a relevant personal-background question is not off-topic.
 - For unclear speech or language with no recoverable meaning, say naturally: “I’m sorry, I didn’t understand. Could you say that again?”
-- If the contribution is understandable but clearly unrelated to the situation, gently signal a misunderstanding and paraphrase the central dilemma using only established facts.
+- For off-topic meaning, begin “I’m not sure what you mean.” Then briefly paraphrase the central dilemma using only established facts. Do not ask the student to repeat clear words.
 - Use natural contractions and varied conversational wording. Avoid stock replies and do not repeat an examiner sentence already used in the transcript.
 - “That might be worth trying” is allowed, but use it at most once in the complete conversation.
 - If the contribution is ambiguous, respond cautiously without inventing a fact or conversational route.
@@ -385,7 +387,13 @@ async function generateControlledReply({ latest, mode, transcript, supportIndex,
   const retryInput = `${input}\n\nYour first draft detected intent "${firstCheck.intent}" but was rejected because ${firstCheck.reason}. Rewrite it once, preserving that intent and the storyline. Rejected reply: ${firstCheck.reply}`;
   const secondDraft = await requestExaminerDraft({ instructions, input: retryInput }, env);
   const secondCheck = validateControlledReply(secondDraft, transcript, firstCheck.intent);
-  if (!secondCheck.valid) return "I’m sorry, I didn’t understand. Could you say that another way?";
+  if (!secondCheck.valid) {
+    const usableReply = String(secondCheck.reply || "").trim();
+    if (usableReply && usableReply.split(/\s+/).length <= 30 && !/^(examiner|reply)\s*:/i.test(usableReply)) return usableReply;
+    if (firstCheck.intent === "question") return "I’m not completely sure, but I can tell you what I know.";
+    if (firstCheck.intent === "advice") return "I’ll consider that while trying to protect my own limits.";
+    return "I see your point, and it does connect with my concern.";
+  }
   return secondCheck.reply;
 }
 
