@@ -1,5 +1,7 @@
 const TASK_OPENING = "My new neighbours regularly make noise late at night, but I don’t want to create a bad relationship with them.";
 
+import { CONVERSATION_TOPICS, GRAMMAR_OPPORTUNITIES, SPOKEN_LANGUAGE_TOOLS, getConversationTopic } from "./conversation-data.js";
+
 const TASKS = [
   { id: "level-1-task-1", level: 1, number: 1, title: "Noisy neighbours", opening: TASK_OPENING, facts: ["You rent a flat, and the neighbours moved into the flat next door three months ago.", "Loud music happens two or three nights a week.", "You start work early.", "You spoke to them once; they apologised, but the noise continued.", "They seem friendly during the day.", "Other neighbours are also affected."], options: ["speak again", "write a polite message", "involve the landlord"] },
   { id: "level-1-task-2", level: 1, number: 2, title: "Adopting a dog", opening: "My family wants to adopt a dog, but I’m worried that I’ll eventually have to do all the work.", facts: ["You are a parent living with your partner and two teenagers.", "Your partner and both teenagers want the dog and promise to help.", "The teenagers are at school on weekdays, and your partner usually works away from home during the day.", "You live in a flat near a park.", "The dog is young and energetic.", "Nobody in the family has owned a dog before.", "You work from home three days a week."], options: ["adopt", "foster first", "choose an older dog", "wait"] },
@@ -229,18 +231,20 @@ async function createSession(request, env) {
   if (!env.OPENAI_API_KEY) return json({ error: "OPENAI_API_KEY is not configured." }, 500);
   const sdp = await request.text();
   if (!sdp) return json({ error: "Missing WebRTC offer." }, 400);
-  const task = getTask(new URL(request.url).searchParams.get("task"));
+  const url = new URL(request.url);
+  const task = getTask(url.searchParams.get("task"));
+  const isConversation = url.searchParams.get("mode") === "conversation";
 
   const session = {
     type: "realtime",
     model: "gpt-realtime-2.1",
-    instructions: buildTaskInstructions(task),
+    instructions: isConversation ? "Transcribe the student's English speech accurately. Do not respond automatically." : buildTaskInstructions(task),
     output_modalities: ["audio"],
     max_output_tokens: 1000,
     audio: {
       input: {
         transcription: { model: "gpt-4o-mini-transcribe", language: "en" },
-        turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 1100, create_response: false, interrupt_response: false },
+        turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: isConversation ? 500 : 300, silence_duration_ms: isConversation ? 1600 : 1100, create_response: false, interrupt_response: false },
       },
       output: { voice: "marin" },
     },
@@ -277,6 +281,163 @@ async function createFeedback(request, env) {
   });
   const payload = await response.json();
   if (!response.ok) return json({ error: "Could not generate feedback." }, response.status);
+  return json({ feedback: extractOutputText(payload) });
+}
+
+const CONVERSATION_QUESTION_FORMAT = {
+  type: "json_schema",
+  name: "conversation_question",
+  strict: true,
+  schema: {
+    type: "object",
+    properties: {
+      question: { type: "string" },
+      grammarOpportunity: { type: "string" },
+      suggestedVocabulary: { type: "array", items: { type: "string" }, minItems: 4, maxItems: 4 },
+    },
+    required: ["question", "grammarOpportunity", "suggestedVocabulary"],
+    additionalProperties: false,
+  },
+};
+
+const CONVERSATION_FOLLOWUP_FORMAT = {
+  type: "json_schema",
+  name: "conversation_followup",
+  strict: true,
+  schema: {
+    type: "object",
+    properties: { followup: { type: "string" } },
+    required: ["followup"],
+    additionalProperties: false,
+  },
+};
+
+async function requestStructuredText({ instructions, input, format, maxOutputTokens = 250 }, env) {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "gpt-4.1-mini", max_output_tokens: maxOutputTokens, instructions, input, text: { format } }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload?.error?.message || "Could not generate conversation content.");
+  try { return JSON.parse(extractOutputText(payload)); } catch { throw new Error("The conversation service returned invalid content."); }
+}
+
+function randomItem(items) {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function shuffled(items) {
+  return [...items].sort(() => Math.random() - 0.5);
+}
+
+async function createConversationQuestion(request, env) {
+  if (!env.OPENAI_API_KEY) return json({ error: "OPENAI_API_KEY is not configured." }, 500);
+  const { topicId, repeatQuestion, grammarOpportunity, vocabulary: previousVocabulary } = await request.json();
+  const topic = getConversationTopic(topicId);
+  if (repeatQuestion?.trim()) {
+    const question = String(repeatQuestion).trim();
+    const audio = await synthesiseSpeech(question, env);
+    return json({ topic: { id: topic.id, name: topic.name }, question, grammarOpportunity: grammarOpportunity || "giving and supporting an opinion", vocabulary: previousVocabulary || [], audio, contentType: "audio/mpeg" });
+  }
+  const grammar = randomItem(GRAMMAR_OPPORTUNITIES);
+  const angle = randomItem(topic.angles);
+  const vocabulary = shuffled(topic.vocabulary).slice(0, 12);
+  const draft = await requestStructuredText({
+    instructions: `Create one natural Trinity GESE B2 Conversation phase question.
+The student must be able to answer from personal opinion, preference, experience, prediction or speculation.
+Never test factual knowledge, statistics, dates, laws or specialist information.
+Use clear spoken English and ask exactly one question of no more than 22 words.
+Create a genuinely open question that invites reasons and examples.
+Do not mention the grammar target or vocabulary list in the question.
+Return four useful topic expressions from the supplied list that could naturally support an answer.`,
+    input: `Topic: ${topic.name}\nConversation angle: ${angle}\nHidden grammar opportunity: ${grammar.label}\nHow to create that opportunity: ${grammar.guidance}\nApproved topic vocabulary: ${vocabulary.join(", ")}`,
+    format: CONVERSATION_QUESTION_FORMAT,
+  }, env);
+  const question = String(draft.question || "").trim();
+  if (!question.endsWith("?")) throw new Error("Could not prepare a valid conversation question.");
+  const suggestedVocabulary = draft.suggestedVocabulary.filter((item) => topic.vocabulary.includes(item)).slice(0, 4);
+  const safeVocabulary = suggestedVocabulary.length >= 2 ? suggestedVocabulary : vocabulary.slice(0, 4);
+  const audio = await synthesiseSpeech(question, env);
+  return json({ topic: { id: topic.id, name: topic.name }, question, grammarOpportunity: grammar.label, vocabulary: safeVocabulary, audio, contentType: "audio/mpeg" });
+}
+
+async function createConversationFollowup(request, env) {
+  if (!env.OPENAI_API_KEY) return json({ error: "OPENAI_API_KEY is not configured." }, 500);
+  const { topicId, question, answer } = await request.json();
+  if (!question?.trim() || !answer?.trim()) return json({ error: "A question and answer are required." }, 400);
+  const topic = getConversationTopic(topicId);
+  const draft = await requestStructuredText({
+    instructions: `Write exactly one short, natural follow-up question for a Trinity GESE B2 conversation.
+Respond to something the student actually said and help them develop, explain, exemplify, compare, speculate or describe an experience.
+Do not correct, teach, praise or change topic. Never test factual knowledge.
+Use no more than 18 words.`,
+    input: `Topic: ${topic.name}\nMain question: ${question}\nStudent answer: ${answer}`,
+    format: CONVERSATION_FOLLOWUP_FORMAT,
+    maxOutputTokens: 100,
+  }, env);
+  const followup = String(draft.followup || "").trim();
+  if (!followup.endsWith("?")) throw new Error("Could not prepare a valid follow-up question.");
+  const audio = await synthesiseSpeech(followup, env);
+  return json({ followup, audio, contentType: "audio/mpeg" });
+}
+
+async function createConversationFeedback(request, env) {
+  if (!env.OPENAI_API_KEY) return json({ error: "OPENAI_API_KEY is not configured." }, 500);
+  const { topicId, question, answer, followup, followupAnswer, grammarOpportunity, vocabulary, previousAttempt } = await request.json();
+  const topic = getConversationTopic(topicId);
+  const retry = previousAttempt?.answer ? `\nThis is a retry of the same main question.
+Previous answers:
+Main answer: ${previousAttempt.answer}
+Follow-up answer: ${previousAttempt.followupAnswer || "Not available"}
+Previous coaching tools: ${previousAttempt.feedback || "Not available"}
+Explicitly identify any suggested connector, grammatical structure or topic vocabulary used successfully this time. Do not recommend a mastered item again.` : "";
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "gpt-4.1-mini",
+      max_output_tokens: 900,
+      instructions: `You are a warm, precise B2 speaking coach. Give concise feedback in Spanish about this short Trinity-style conversation.
+English is allowed only for exact quotations, corrections and suggested language.
+Do not score, grade or write a long general assessment.
+
+Use exactly these sections:
+LO QUE FUNCIONÓ BIEN
+- Mention one or two real communicative strengths.
+
+CORRECCIONES IMPORTANTES
+- Give zero to three genuine grammar corrections only.
+- Use: Dijiste / Mejor / Por qué.
+- Omit the section entirely if there is no meaningful error.
+- Ignore punctuation, capitalisation and transcription formatting.
+- Never manufacture a correction or replace correct natural English with a stylistic preference.
+
+UNA HERRAMIENTA PARA REPETIR
+- Choose exactly one natural spoken connector, opening or phrase from the approved language tools that the student did not already use.
+- Explain briefly how it can improve this answer.
+
+VOCABULARIO DEL TEMA
+- Recommend exactly two useful expressions from the approved topic vocabulary that the student did not already use.
+- Give a short, natural example connected to the question.
+
+TU RETO
+- Invite the student to answer the same question again using the one language tool and at least one vocabulary expression.
+
+If this is a retry, put PROGRESO DESDE EL INTENTO ANTERIOR first and celebrate concrete successful use before the other sections.`,
+      input: `Topic: ${topic.name}
+Main question: ${question}
+Student answer: ${answer}
+Follow-up question: ${followup}
+Student follow-up answer: ${followupAnswer}
+Hidden grammar opportunity (offer it only if it genuinely improves the answer): ${grammarOpportunity}
+Approved spoken language tools: ${SPOKEN_LANGUAGE_TOOLS.join(" | ")}
+Approved topic vocabulary: ${topic.vocabulary.join(" | ")}
+Priority vocabulary selected with this question: ${(vocabulary || []).join(" | ")}${retry}`,
+    }),
+  });
+  const payload = await response.json();
+  if (!response.ok) return json({ error: "Could not generate conversation feedback." }, response.status);
   return json({ feedback: extractOutputText(payload) });
 }
 
@@ -432,8 +593,56 @@ async function createControlledExaminerTurn(request, env) {
 
 const CLIENT_TASKS = TASKS.map(({ id, level, number, title, opening }) => ({ id, level, number, title, opening }));
 const CLIENT_LEVELS = LEVELS.map(({ level, name, short, stage }) => ({ level, name, short, stage }));
+const CLIENT_CONVERSATION_TOPICS = CONVERSATION_TOPICS.map(({ id, name, description }) => ({ id, name, description }));
 
-const HTML = `<!doctype html>
+const LANDING_HTML = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Simply English | Trinity Speaking Coach</title>
+<style>
+:root{--ink:#0F1722;--ocean:#41788B;--mist:#8CB8BA;--coral:#E47162;--paper:#FFFFFA;--muted:#66727a}*{box-sizing:border-box}body{margin:0;color:var(--ink);background:radial-gradient(circle at 10% 5%,rgba(140,184,186,.22),transparent 25rem),radial-gradient(circle at 92% 28%,rgba(228,113,98,.12),transparent 22rem),var(--paper);font-family:Manrope,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}main{width:min(820px,100%);margin:auto;padding:34px 18px 72px}.logo{width:108px;height:108px;border-radius:50%;object-fit:cover;box-shadow:0 8px 24px rgba(15,23,34,.08)}.eyebrow{color:var(--ocean);font-size:.76rem;font-weight:900;letter-spacing:.13em;margin:18px 0 8px}h1{font-size:clamp(2.4rem,8vw,4.4rem);line-height:.96;letter-spacing:-.05em;margin:8px 0 18px}.intro{color:var(--muted);line-height:1.6;max-width:42rem}.choices{display:grid;gap:16px;margin-top:32px}.choice{display:block;text-decoration:none;color:var(--ink);background:rgba(255,255,255,.95);border:1px solid rgba(65,120,139,.2);border-radius:24px;padding:26px;box-shadow:0 18px 48px rgba(15,23,34,.08);transition:.18s}.choice:hover{transform:translateY(-2px);border-color:var(--ocean)}.choice strong{display:block;font-size:1.35rem}.choice span{display:block;color:var(--muted);line-height:1.5;margin-top:8px}.choice em{display:inline-block;color:white;background:var(--coral);border-radius:999px;padding:5px 10px;font-size:.72rem;font-style:normal;font-weight:900;letter-spacing:.08em;margin-bottom:14px}@media(min-width:680px){.choices{grid-template-columns:1fr 1fr}}
+</style></head><body><main>
+<img class="logo" src="/simply-english-logo.jpeg" alt="Simply English">
+<p class="eyebrow">TRINITY SPEAKING COACH</p><h1>Choose your practice</h1>
+<p class="intro">Build confident B2 interaction with two different Trinity-style speaking activities. Both use voice practice and personalised coaching in Spanish.</p>
+<div class="choices">
+<a class="choice" href="/collaborative"><em>4-MINUTE PRACTICE</em><strong>Collaborative Task</strong><span>Explore a dilemma, ask questions, react and help the examiner consider possible solutions.</span></a>
+<a class="choice" href="/conversation"><em>ANSWER · COACH · RETRY</em><strong>Conversation Task</strong><span>Choose a topic, answer a surprise question and improve the same answer with focused language tools.</span></a>
+</div></main></body></html>`;
+
+const CONVERSATION_HTML = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Simply English | Conversation Task</title>
+<style>
+:root{--ink:#0F1722;--ocean:#41788B;--mist:#8CB8BA;--coral:#E47162;--paper:#FFFFFA;--muted:#66727a}*{box-sizing:border-box}body{margin:0;color:var(--ink);background:radial-gradient(circle at 10% 5%,rgba(140,184,186,.22),transparent 25rem),radial-gradient(circle at 92% 28%,rgba(228,113,98,.10),transparent 22rem),var(--paper);font-family:Manrope,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}button{font:inherit}main{width:min(760px,100%);margin:auto;padding:24px 18px 72px}.logo{width:92px;height:92px;border-radius:50%;object-fit:cover}.eyebrow{color:var(--ocean);font-size:.76rem;font-weight:900;letter-spacing:.13em;margin:14px 0 7px}h1{font-size:clamp(2.1rem,8vw,3.5rem);line-height:.98;letter-spacing:-.045em;margin:6px 0 16px}h2{margin:5px 0;font-size:1.2rem}.intro{color:var(--muted);line-height:1.55}.card{background:rgba(255,255,255,.95);border:1px solid rgba(65,120,139,.18);border-radius:24px;box-shadow:0 18px 48px rgba(15,23,34,.08);padding:22px;margin:18px 0}.topic-grid{display:grid;gap:11px;margin-top:18px}.topic{border:1px solid rgba(65,120,139,.2);background:white;border-radius:17px;padding:17px;text-align:left;color:var(--ink);cursor:pointer}.topic:hover{border-color:var(--ocean);transform:translateY(-1px)}.topic strong,.topic span{display:block}.topic span{color:var(--muted);font-size:.86rem;line-height:1.45;margin-top:5px}.status{display:flex;align-items:center;gap:10px;background:rgba(140,184,186,.16);border-radius:14px;padding:13px 15px;margin:18px 0}.dot{width:10px;height:10px;border-radius:50%;background:#aab4b8}.listening .dot{background:var(--coral);box-shadow:0 0 0 5px rgba(228,113,98,.14);animation:pulse 1.1s ease-in-out infinite}.thinking .dot{background:var(--ocean);animation:pulse 1s ease-in-out infinite}.complete .dot{background:var(--ocean)}@keyframes pulse{50%{transform:scale(1.25);box-shadow:0 0 0 7px rgba(65,120,139,.14)}}.button{border:0;border-radius:14px;padding:15px 18px;font-weight:850;cursor:pointer;min-height:54px}.primary{background:var(--coral);color:white}.secondary{background:var(--mist);color:var(--ink)}.wide{width:100%}.controls{display:grid;gap:10px}.hidden{display:none!important}.back{display:inline-block;color:var(--ocean);text-decoration:none;font-weight:800;margin:8px 0 6px}.turns{display:grid;gap:12px}.turn{border-radius:16px;padding:13px 15px;max-width:90%}.turn small{display:block;font-weight:900;letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px}.turn p{margin:0;line-height:1.5}.student{margin-left:auto;background:rgba(140,184,186,.18)}.examiner{background:rgba(228,113,98,.11)}.feedback{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65}.error{color:#8a1c13;background:#fff0ee;padding:12px 14px;border-radius:12px}.disclosure{font-size:.75rem;color:var(--muted);line-height:1.45}@media(min-width:580px){main{padding-top:34px}.topic-grid{grid-template-columns:1fr 1fr}.controls{grid-template-columns:1fr 1fr}.card{padding:28px}}
+</style></head><body><main>
+<a class="back" href="/">← All practice types</a>
+<header><img class="logo" src="/simply-english-logo.jpeg" alt="Simply English"><p class="eyebrow">TRINITY GESE B2</p><h1>Conversation Task</h1><p class="intro">Choose a topic. You will hear one surprise question and one natural follow-up, then receive focused tools to improve your answer.</p></header>
+<section id="topicsCard" class="card"><p class="eyebrow">CHOOSE A TOPIC</p><h2>What would you like to practise?</h2><div id="topicGrid" class="topic-grid"></div></section>
+<section id="practiceCard" class="card hidden"><p id="topicLabel" class="eyebrow"></p><h2>Listen and answer naturally</h2><div id="status" class="status ready"><span class="dot"></span><span id="statusText">Ready for a surprise question</span></div><p id="error" class="error hidden"></p><div class="controls"><button id="start" class="button primary">Start</button><button id="changeTopic" class="button secondary">Change topic</button></div><p class="disclosure">The question is selected automatically. The examiner voice is AI-generated, and your microphone is used only during this practice.</p></section>
+<section id="transcriptCard" class="card hidden"><h2>Conversation transcript</h2><div id="turns" class="turns"></div></section>
+<section id="feedbackCard" class="card hidden"><p class="eyebrow">FOCUSED COACHING</p><div id="feedback" class="feedback"></div><div class="controls"><button id="retry" class="button primary">Try the same question again</button><button id="newQuestion" class="button secondary">New surprise question</button></div></section>
+</main><script>
+const TOPICS=${JSON.stringify(CLIENT_CONVERSATION_TOPICS)};let topic=null,current=null,previousAttempt=null,answer='',followupAnswer='',pc=null,dc=null,audioContext=null,micTracks=[],stage=0,busy=false;
+const el=id=>document.getElementById(id);
+function setStatus(kind,text){el('status').className='status '+kind;el('statusText').textContent=text}
+function renderTopics(){el('topicGrid').textContent='';TOPICS.forEach(item=>{const b=document.createElement('button');b.className='topic';const title=document.createElement('strong');title.textContent=item.name;const detail=document.createElement('span');detail.textContent=item.description;b.append(title,detail);b.onclick=()=>chooseTopic(item);el('topicGrid').appendChild(b)})}
+function chooseTopic(item){topic=item;current=null;previousAttempt=null;el('topicLabel').textContent=item.name.toUpperCase();el('topicsCard').classList.add('hidden');el('practiceCard').classList.remove('hidden');el('transcriptCard').classList.add('hidden');el('feedbackCard').classList.add('hidden');el('start').classList.remove('hidden');setStatus('ready','Ready for a surprise question')}
+function showTopics(){stopConnection();topic=null;current=null;previousAttempt=null;el('topicsCard').classList.remove('hidden');el('practiceCard').classList.add('hidden');el('transcriptCard').classList.add('hidden');el('feedbackCard').classList.add('hidden')}
+function addTurn(role,text){if(!String(text||'').trim())return;const box=document.createElement('div');box.className='turn '+role.toLowerCase();const who=document.createElement('small');who.textContent=role;const p=document.createElement('p');p.textContent=text;box.append(who,p);el('turns').appendChild(box)}
+function stopConnection(){if(dc)dc.close();if(pc){pc.getSenders().forEach(s=>s.track&&s.track.stop());pc.close()}if(audioContext)audioContext.close();dc=null;pc=null;audioContext=null;micTracks=[];busy=false}
+async function connect(){audioContext=new(window.AudioContext||window.webkitAudioContext)();await audioContext.resume();pc=new RTCPeerConnection();const stream=await navigator.mediaDevices.getUserMedia({audio:true,echoCancellation:true,noiseSuppression:true,autoGainControl:true});micTracks=stream.getAudioTracks();micTracks.forEach(t=>t.enabled=false);stream.getTracks().forEach(t=>pc.addTrack(t,stream));dc=pc.createDataChannel('oai-events');dc.onmessage=m=>onEvent(JSON.parse(m.data));const opened=new Promise((resolve,reject)=>{dc.onopen=resolve;dc.onerror=reject});const offer=await pc.createOffer();await pc.setLocalDescription(offer);const response=await fetch('/api/session?mode=conversation',{method:'POST',headers:{'Content-Type':'application/sdp'},body:offer.sdp});if(!response.ok){const p=await response.json();throw new Error(p.error||'Could not start the voice session.')}await pc.setRemoteDescription({type:'answer',sdp:await response.text()});await opened}
+async function play(base64){const bytes=Uint8Array.from(atob(base64),c=>c.charCodeAt(0));const buffer=await audioContext.decodeAudioData(bytes.buffer);await new Promise((resolve,reject)=>{const source=audioContext.createBufferSource();source.buffer=buffer;source.connect(audioContext.destination);source.onended=resolve;try{source.start()}catch(e){reject(e)}})}
+async function startPractice(retry=false){if(!topic||busy)return;stopConnection();busy=true;stage=0;answer='';followupAnswer='';el('turns').textContent='';el('feedback').textContent='';el('transcriptCard').classList.remove('hidden');el('feedbackCard').classList.add('hidden');el('error').classList.add('hidden');el('start').classList.add('hidden');setStatus('thinking',retry?'Preparing the same question…':'Preparing your surprise question…');try{const body={topicId:topic.id};if(retry&&current)Object.assign(body,{repeatQuestion:current.question,grammarOpportunity:current.grammarOpportunity,vocabulary:current.vocabulary});const [questionResponse]=await Promise.all([fetch('/api/conversation/question',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),connect()]);const raw=await questionResponse.text();let payload;try{payload=JSON.parse(raw)}catch{throw new Error('The question service returned an unreadable response.')}if(!questionResponse.ok)throw new Error(payload.error||'Could not prepare the question.');current=payload;addTurn('Examiner',current.question);setStatus('thinking','Listen to the examiner');await play(current.audio);stage=1;busy=false;setStatus('listening','Your turn — answer the question');micTracks.forEach(t=>t.enabled=true)}catch(e){stopConnection();el('error').textContent=e.message||'Could not start the practice.';el('error').classList.remove('hidden');el('start').classList.remove('hidden');setStatus('ready','Please try again')}}
+async function requestFollowup(){busy=true;micTracks.forEach(t=>t.enabled=false);setStatus('thinking','✓ Answer received — preparing a follow-up…');try{const response=await fetch('/api/conversation/followup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({topicId:topic.id,question:current.question,answer})});const payload=await response.json();if(!response.ok)throw new Error(payload.error||'Could not prepare the follow-up.');current.followup=payload.followup;addTurn('Examiner',payload.followup);await play(payload.audio);stage=2;busy=false;setStatus('listening','Your turn — answer the follow-up');micTracks.forEach(t=>t.enabled=true)}catch(e){showPracticeError(e)}}
+async function finishAndCoach(){busy=true;micTracks.forEach(t=>t.enabled=false);setStatus('thinking','✓ Answer received — preparing your coaching…');const requestBody={topicId:topic.id,question:current.question,answer,followup:current.followup,followupAnswer,grammarOpportunity:current.grammarOpportunity,vocabulary:current.vocabulary,previousAttempt};stopConnection();try{const response=await fetch('/api/conversation/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(requestBody)});const payload=await response.json();if(!response.ok)throw new Error(payload.error||'Could not prepare feedback.');current.feedback=payload.feedback;el('feedback').textContent=payload.feedback;el('feedbackCard').classList.remove('hidden');setStatus('complete','Coaching ready — try the same question again');busy=false}catch(e){showPracticeError(e)}}
+function showPracticeError(e){busy=false;micTracks.forEach(t=>t.enabled=true);el('error').textContent=e.message||'Something went wrong.';el('error').classList.remove('hidden');setStatus(stage?'listening':'ready',stage?'Please continue when ready':'Please try again')}
+function onEvent(event){if(event.type==='conversation.item.input_audio_transcription.completed'&&!busy){const text=String(event.transcript||'').trim();if(!text)return;addTurn('Student',text);if(stage===1){answer=text;requestFollowup()}else if(stage===2){followupAnswer=text;finishAndCoach()}}if(event.type==='error'){console.error(event);showPracticeError(new Error('The voice connection reported an error.'))}}
+function retry(){previousAttempt={answer,followupAnswer,feedback:current.feedback};startPractice(true)}
+function newQuestion(){current=null;previousAttempt=null;startPractice(false)}
+el('start').onclick=()=>startPractice(false);el('changeTopic').onclick=showTopics;el('retry').onclick=retry;el('newQuestion').onclick=newQuestion;renderTopics();
+</script></body></html>`;
+
+const COLLABORATIVE_HTML = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Simply English | Trinity GESE B2 Coach</title>
 <style>
@@ -442,7 +651,7 @@ const HTML = `<!doctype html>
 .level-grid,.task-list{display:grid;gap:12px;margin-top:18px}.level-card,.task-choice{width:100%;text-align:left;border:1px solid rgba(65,120,139,.2);background:white;border-radius:18px;padding:18px;cursor:pointer;color:var(--ink)}.level-card:hover,.task-choice:hover{border-color:var(--ocean);transform:translateY(-1px)}.level-card strong,.task-choice strong{display:block;font-size:1.05rem}.level-card span,.task-choice span{display:block;color:var(--muted);font-size:.86rem;line-height:1.45;margin-top:5px}.level-card[disabled]{cursor:not-allowed;opacity:.58;transform:none}.back-button{border:0;background:transparent;color:var(--ocean);font-weight:800;padding:4px 0 12px;cursor:pointer}.practice-back{margin-top:10px;width:100%}@media(min-width:560px){.level-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .feedback-line{display:block;white-space:pre-wrap}.feedback-line.success{color:#21653c;font-weight:750}.feedback-line.warning{color:#9a5b16;background:#fff7e8;border-radius:8px;padding:4px 7px;margin-top:4px}.feedback-line.corrected{color:#275f75;background:#eef8fa;border-left:3px solid var(--ocean);padding:4px 8px;font-weight:750}
 </style></head><body><main>
-<section class="hero"><img class="brand-logo" src="/simply-english-logo.jpeg" alt="Simply English"><p class="eyebrow">TRINITY GESE B2 VOICE COACH</p><h1>Interactive Task · Prototype</h1><p class="intro">A five-level route towards confident B2 interaction, with four-minute voice practice and feedback in Spanish.</p></section>
+<section class="hero"><a class="back-button" href="/">← All practice types</a><img class="brand-logo" src="/simply-english-logo.jpeg" alt="Simply English"><p class="eyebrow">TRINITY GESE B2 VOICE COACH</p><h1>Collaborative Task</h1><p class="intro">A five-level route towards confident B2 interaction, with four-minute voice practice and feedback in Spanish.</p></section>
 <section id="levelChooser" class="card"><p class="eyebrow">CHOOSE YOUR LEVEL</p><h2>Your route towards B2</h2><p class="intro">Levels 1–3 build the skills you need for B2. A high score there shows progress at that practice level, not a B2 pass. From Level 4, a strong performance can provide evidence consistent with the B2 target in this practice.</p><div id="levelGrid" class="level-grid"></div></section>
 <section id="taskChooser" class="card hidden"><button id="backToLevels" class="back-button">← Back to levels</button><p id="taskLevelHeading" class="eyebrow">LEVEL 1 · CORE PRACTICE</p><h2>Choose a collaborative task</h2><div id="taskList" class="task-list"></div></section>
 <section id="practiceCard" class="card hidden"><div class="task-row"><div><span id="levelLabel" class="label">LEVEL 1</span><h2 id="taskTitle">Choose a task</h2></div><div id="timer" class="timer">4:00</div></div><div id="status" class="status ready"><span class="dot"></span><span id="statusText">Ready to begin</span></div><p id="error" class="error-box hidden"></p><div class="controls"><button id="start" class="button primary">Start task</button><button id="finish" class="button danger hidden">Finish task</button><button id="getFeedback" class="button primary hidden">Get my feedback</button><button id="repeat" class="button secondary hidden">Try again</button></div><button id="chooseTask" class="button secondary practice-back">Choose another task</button><p class="disclosure">The examiner voice is AI-generated. Your microphone is used only during this practice session.</p></section>
@@ -482,8 +691,13 @@ export async function handleRequest(request, env) {
       if (request.method === "POST" && url.pathname === "/api/session") return await createSession(request, env);
       if (request.method === "POST" && url.pathname === "/api/examiner") return await createControlledExaminerTurn(request, env);
       if (request.method === "POST" && url.pathname === "/api/feedback") return await createFeedback(request, env);
+      if (request.method === "POST" && url.pathname === "/api/conversation/question") return await createConversationQuestion(request, env);
+      if (request.method === "POST" && url.pathname === "/api/conversation/followup") return await createConversationFollowup(request, env);
+      if (request.method === "POST" && url.pathname === "/api/conversation/feedback") return await createConversationFeedback(request, env);
       if (url.pathname === "/favicon.ico") return new Response(null, { status: 204 });
-      if (request.method === "GET") return new Response(HTML, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      if (request.method === "GET" && url.pathname === "/conversation") return new Response(CONVERSATION_HTML, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      if (request.method === "GET" && url.pathname === "/collaborative") return new Response(COLLABORATIVE_HTML, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+      if (request.method === "GET") return new Response(LANDING_HTML, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
       return new Response("Not found", { status: 404 });
     } catch (error) {
       console.error(error);
