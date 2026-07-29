@@ -419,10 +419,11 @@ UNA HERRAMIENTA PARA REPETIR
 
 VOCABULARIO DEL TEMA
 - Recommend exactly two useful expressions from the approved topic vocabulary that the student did not already use.
-- Give a short, natural example connected to the question.
+- Give one short, natural, fully English example sentence for each expression. Keep the surrounding explanation in Spanish.
 
 TU RETO
-- Invite the student to answer the same question again using the one language tool and at least one vocabulary expression.
+- Invite the student to answer the same MAIN question again using the one language tool and at least one vocabulary expression.
+- Never tell the student to retry only the follow-up question; the application always repeats the main question and then creates a new follow-up.
 
 If this is a retry, put PROGRESO DESDE EL INTENTO ANTERIOR first and celebrate concrete successful use before the other sections.`,
       input: `Topic: ${topic.name}
